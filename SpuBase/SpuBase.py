@@ -1,3 +1,8 @@
+"""Sputter Database (SpuBase) class
+
+See the LICENSE file for licensing information.
+"""
+
 import os
 import re
 import sys
