@@ -1,12 +1,12 @@
 # SpuBase
 
-[//]: # (A Python class for computing ion sputter data based on single mineral sputter data.)
+A Python class for computing ion sputter data based on single mineral sputter data.
 
-[//]: # ()
-[//]: # (See the Jupyter notebook tutorials in the package directory `docs/`.)
 
-[//]: # ()
-[//]: # (You are encouraged to fork this repository or create your own branch to add new features. You will need to issue a pull request to be able to merge your code into the main branch.)
+See the Jupyter notebook tutorials in the package directory `docs/`.
+
+
+You are encouraged to fork this repository or create your own branch to add new features. You will need to issue a pull request to be able to merge your code into the main branch.
 
 ## Installation for use
 I recommend creating a pyton environment which is independent of whatever environment you are normally working from to prevent messing up dependencies. I further recommend Anaconda for this task. 
@@ -24,7 +24,7 @@ I recommend creating a pyton environment which is independent of whatever enviro
    * `pip install seaborn==0.13.0`
 
 ## Demonstration
-#### Location of Jupyter Notebooks
+#### Determine path to Jupyter Notebooks
 1. To locate the example Jupyter notebooks, enter python:
 
     ```
@@ -41,10 +41,10 @@ This will report the location of the *SpuBase* package on your system, from whic
 #### Running Jupyter Notebooks
 1. When located within the *SpuBase* location, you can access the Jupyter notebook tutorials with:
     ```
-    jupyter notebook /docs/SDTrimSPDB-basic-demo.ipynb
+    jupyter notebook /docs/<FILENAME>.ipynb
     ```
-
-   * Alternatively to changing directories you could instead give the whole path to where *docs* is on your system and the notebook you want to open.
+    with `<Filename>` being either `0_Mineral_fractions` or `1_Surface_compositions`.
+    * An alternative to changing directories is to give the absolute path to the notebook you want to open instead.
 
 4. In the Jupyter notebook window you may have to *trust* the notebook for all features to work.
 
