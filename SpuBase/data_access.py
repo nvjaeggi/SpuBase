@@ -1784,8 +1784,6 @@ class Particles:
         minfrac_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
         minfrac_vol = minfrac_wt.div(pd.Series(rho_min_dict))
 
-        print(minfrac_mol, minfrac_vol, minfrac_wt)
-
         minfrac_mol, minfrac_vol, minfrac_wt = normalize_dfs([minfrac_mol, minfrac_vol, minfrac_wt])
 
         print(f'\nVolume fractions:\n{minfrac_vol}')
