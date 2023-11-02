@@ -1,4 +1,4 @@
-"""Sputter Database (SpuBase) class
+"""Sputter Database (SpuBase) class to access data stored in /data
 
 See the LICENSE file for licensing information.
 """
@@ -139,7 +139,7 @@ def fit_eq(xdata, ydata, eq, binary_e=1e5):
                                    # p0=[-40/deg_from_rad,2,1],
                                    # sigma=ydata**-2,
                                    # method='trf',
-                                   maxfev=500)
+                                   maxfev=2000)
 
             """
             Determine normalization factor
@@ -171,6 +171,21 @@ def fit_eq(xdata, ydata, eq, binary_e=1e5):
             popt = popt[:2]  # drop binary_e again
         return popt, pcov
 
+def normalize_df(df):
+    df.dropna(inplace=True, axis=1)
+    df = df.loc[:, (df != 0).any(axis=0)]
+    df = df.T
+    df /= df.sum(axis=0).values[0]
+    return df
+
+def normalize_dfs(df_a):
+    for dd, df in enumerate(df_a):
+        df.dropna(inplace=True, axis=1)
+        df = df.loc[:, (df != 0).any(axis=0)]
+        df = df.T
+        df /= df.sum(axis=0).values[0]
+        df_a[dd] = df
+    return df_a
 
 class Particles:
     def __init__(self, verbose=False, show_plot=False):
@@ -211,8 +226,7 @@ class Particles:
         self.update_file_format('png')
 
         self.rho_minerals_df = None
-        self.minfrac_df_molar = None  # mineral fraction in mole% (Ol, Px and Plag are separated into end-members)
-        self.minfrac_df_weight = None  # mineral fraction in weight%
+        self.minfrac_df_volume = None  # mineral fraction in volume%
         self.minfrac_df_weight_CIPW = None  # mineral fraction in weight% with default CIPW mineralogy (one Ol, one Px)
         self.rho_system_df = None
         self.plotting_key = None  # color palette used for seaborn plots
@@ -224,7 +238,7 @@ class Particles:
         self.mineral_a = None  # array of minerals in system
         self.minfrac_a = None  # array of mineral fractions
 
-        self.min_not_included = ['Cor']
+        self.min_not_included = ['Cor','Ap']
         self.dist_angle = 45  # default incident angle for outputs is 45°
 
         self.angles_a = list(np.linspace(0.0, 88.0, num=89))
@@ -364,47 +378,53 @@ class Particles:
         Determine atomic composition based on mineral composition
         """
 
-        if self.minfrac_df_weight is None:
+        if comp_df is not None:
             # Cleans up passed composition dataframe by dropping zero columns
             # and any mineral that is not part of the databse.
             comp_df = comp_df.loc[:, (comp_df != 0).any(axis=0)]
             comp_df.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
 
             if form == 'mol%':
+                minfrac_mol = comp_df
                 minfrac_wt = comp_df.mul(pd.Series(self.amu_minerals_dic))
-                minfrac_wt.dropna(inplace=True, axis=1)
-                minfrac_wt = minfrac_wt.T
-                minfrac_wt /= minfrac_wt.sum(axis=0).values[0]
-                self.minfrac_df_weight = minfrac_wt
-                self.minfrac_df_molar = comp_df.T
+                minfrac_vol = minfrac_wt.div(pd.Series(self.wt_density_df_minerals_dic))
+
             elif form == 'wt%':
-                minfrac_mol = comp_df.div(pd.Series(self.amu_minerals_dic))
-                minfrac_mol.dropna(inplace=True, axis=1)
-                minfrac_mol = minfrac_mol.T
-                minfrac_mol /= minfrac_mol.sum(axis=0).values[0]
-                self.minfrac_df_weight = minfrac_mol
-                self.minfrac_df_molar = comp_df.T
+                minfrac_wt = comp_df
+                minfrac_vol = comp_df.div(pd.Series(self.amu_minerals_dic))
+                minfrac_mol = comp_df.div(pd.Series(self.wt_density_df_minerals_dic))
+
+            elif form == 'vol%':
+                minfrac_vol = comp_df
+                minfrac_wt = comp_df.mul(pd.Series(self.wt_density_df_minerals_dic))
+                minfrac_mol = minfrac_wt.div(pd.Series(self.amu_minerals_dic))
 
             else:
-                print('Weight percent mineral fractions were assumed.\nPass form="mol%" instead for molar fractions\n')
-                minfrac_mol = comp_df.div(pd.Series(self.amu_minerals_dic))
-                minfrac_mol.dropna(inplace=True, axis=1)
-                minfrac_mol = minfrac_mol.T
-                minfrac_mol /= minfrac_mol.sum(axis=0).values[0]
-                self.minfrac_df_weight = minfrac_mol
-                self.minfrac_df_molar = comp_df.T
+                print('Volume percent mineral fractions were assumed.\n'
+                      'Pass form="mol%" or "wt%" instead for molar/weight fractions\n')
+                minfrac_vol = comp_df
+                minfrac_wt = comp_df.mul(pd.Series(self.wt_density_df_minerals_dic))
+                minfrac_mol = minfrac_wt.div(pd.Series(self.amu_minerals_dic))
+
+
+            minfrac_wt, minfrac_vol, minfrac_mol = normalize_dfs([minfrac_wt, minfrac_vol, minfrac_mol])
+
+
+            self.minfrac_df_volume = minfrac_vol
+            self.minfrac_df_volume.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
+
         else:
-            comp_df = self.minfrac_df_weight.T
-            self.minfrac_df_weight = self.minfrac_df_weight.loc[:, (self.minfrac_df_weight != 0).any(axis=0)]
-            self.minfrac_df_weight.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
+            print('no format passed')
+            self.minfrac_df_volume = self.minfrac_df_volume.loc[:, (self.minfrac_df_volume != 0).any(axis=0)]
+            self.minfrac_df_volume.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
 
         # Creates separate array for mineral names and mineral fractions
         try:
-            self.mineral_a = [col for col in comp_df.columns]
+            self.mineral_a = [col for col in self.minfrac_df_volume.T.columns]
         except:
-            self.mineral_a = [col for col in comp_df.columns]
+            self.mineral_a = [col for col in self.minfrac_df_volume.T.columns]
 
-        self.minfrac_a = self.minfrac_df_molar.T.values.tolist()[0]
+        self.minfrac_a = self.minfrac_df_volume.T.values.tolist()[0]
 
         # Get mineral dictionary that connects elements to minerals
         mindict_df_atoms = self.mindict_df_atoms.loc[:, self.mindict_df_atoms.columns != 'total']
@@ -1333,7 +1353,7 @@ class Particles:
         rho_min_dict = self.wt_density_df_minerals_dic
         mindict_df_atoms = self.mindict_df_atoms.iloc[:, self.mindict_df_atoms.columns != 'total']
         mineral_names = mindict_df_atoms.index.tolist()
-        minfrac = pd.DataFrame(data=np.zeros(len(mineral_names)), columns=['frac'],
+        minfrac_mol = pd.DataFrame(data=np.zeros(len(mineral_names)), columns=['frac'],
                                index=mineral_names).T
 
         comp_df = pd.DataFrame(data=comp_frac_l, columns=['at%'], index=comp_l)
@@ -1399,39 +1419,39 @@ class Particles:
 
                 if 'CrO' in comp_df.columns.values.tolist():
                     if 2 * comp_df['FeO'].tolist()[0] >= comp_df['CrO'].tolist()[0]:
-                        minfrac['Dbr'] = comp_df['CrO'].tolist()[0] / 2  # Dbr = FeCr2S4; occurance: Fe-meteorite
-                        minfrac['Chr'] = minfrac['Dbr'].tolist()[0]  # Chr = FeCr2O4; occurance: Moon
+                        minfrac_mol['Dbr'] = comp_df['CrO'].tolist()[0] / 2  # Dbr = FeCr2S4; occurance: Fe-meteorite
+                        minfrac_mol['Chr'] = minfrac_mol['Dbr'].tolist()[0]  # Chr = FeCr2O4; occurance: Moon
                         comp_df['FeO'] = comp_df['FeO'] - comp_df['CrO'] / 2
                         comp_df['CrO'] = 0.00
                     else:
-                        minfrac['Bzn'] = comp_df['CrO'].tolist()[0] / 3  # Bzn = Cr3S4; occurance: meteorites
+                        minfrac_mol['Bzn'] = comp_df['CrO'].tolist()[0] / 3  # Bzn = Cr3S4; occurance: meteorites
                         comp_df['CrO'] = 0.00
                 elif 'Cr2O3' in comp_df.columns.values.tolist():
                     if comp_df['FeO'].tolist()[0] >= comp_df['Cr2O3'].tolist()[0]:
-                        minfrac['Dbr'] = comp_df['Cr2O3'].tolist()[0]  # Dbr = FeCr2S4; occurance: Fe-meteorite
-                        minfrac['Chr'] = minfrac['Dbr'].tolist()[0]  # Chr = FeCr2O4; occurance: Moon
+                        minfrac_mol['Dbr'] = comp_df['Cr2O3'].tolist()[0]  # Dbr = FeCr2S4; occurance: Fe-meteorite
+                        minfrac_mol['Chr'] = minfrac_mol['Dbr'].tolist()[0]  # Chr = FeCr2O4; occurance: Moon
                         comp_df['FeO'] = comp_df['FeO'] - comp_df['Cr2O3']
                         comp_df['Cr2O3'] = 0.00
                     else:
-                        minfrac['Bzn'] = comp_df['Cr2O3'].tolist()[0] * 2 / 3  # Bzn = Cr3S4
+                        minfrac_mol['Bzn'] = comp_df['Cr2O3'].tolist()[0] * 2 / 3  # Bzn = Cr3S4
                         comp_df['Cr2O3'] = 0.00
                 else:
-                    minfrac['Bzn'] = 0.00
-                    minfrac['Dbr'] = 0.00
+                    minfrac_mol['Bzn'] = 0.00
+                    minfrac_mol['Dbr'] = 0.00
 
                 """
                 ** Check if there is enough S to put Cr into sulfides, otherwise, keep only chromite
                 """
                 pS1 = comp_df['S'].tolist()[0] -\
-                               minfrac['Bzn'].tolist()[0] * 3 - \
-                               minfrac['Dbr'].tolist()[0] * 4
+                               minfrac_mol['Bzn'].tolist()[0] * 3 - \
+                               minfrac_mol['Dbr'].tolist()[0] * 4
 
                 if pS1 > 0:
-                    minfrac['Chr'] = 0
+                    minfrac_mol['Chr'] = 0
                     comp_df['S'] = pS1
                 else:
-                    minfrac['Bzn'] = 0.00
-                    minfrac['Dbr'] = 0.00
+                    minfrac_mol['Bzn'] = 0.00
+                    minfrac_mol['Dbr'] = 0.00
                     if verboseCIPW:
                         print(f'Not enough S to accomodate all Cr, accomodated into chromite (Chr) instead ')
 
@@ -1446,23 +1466,23 @@ class Particles:
                     oxide = oxides[mm]
                     if comp_df['S'].tolist()[0] > 0:
                         if comp_df['S'].tolist()[0] >= comp_df[oxide].tolist()[0]:
-                            minfrac[mineral] = comp_df[oxide].tolist()[0]
+                            minfrac_mol[mineral] = comp_df[oxide].tolist()[0]
                             comp_df[oxide] = 0.00
-                            comp_df['S'] = comp_df['S'].tolist()[0] - minfrac[mineral].tolist()[0]
+                            comp_df['S'] = comp_df['S'].tolist()[0] - minfrac_mol[mineral].tolist()[0]
                         else:
-                            minfrac[mineral] = comp_df['S'].tolist()[0]
+                            minfrac_mol[mineral] = comp_df['S'].tolist()[0]
                             comp_df['S'] = 0.00
-                            comp_df[oxide] = comp_df[oxide].tolist()[0] - minfrac[mineral].tolist()[0]
+                            comp_df[oxide] = comp_df[oxide].tolist()[0] - minfrac_mol[mineral].tolist()[0]
 
                 if verboseCIPW:
                     print(f'remaining sulfur: {comp_df["S"].tolist()[0]} put into 1/4 Old and 3/4 Nng')
                 if comp_df['S'].tolist()[0] > 0:
                     if comp_df['S'].tolist()[0] < min(comp_df['MgO'].tolist()[0] / 3 * 4,
                                                       comp_df['CaO'].tolist()[0] / 4):
-                        minfrac['Nng'] = comp_df['S'].tolist()[0] / 3 * 4
-                        minfrac['Old'] = comp_df['S'].tolist()[0] / 4
-                        comp_df['MgO'] = comp_df['MgO'].tolist()[0] - minfrac['Nng'].tolist()[0]
-                        comp_df['CaO'] = comp_df['CaO'].tolist()[0] - minfrac['Old'].tolist()[0]
+                        minfrac_mol['Nng'] = comp_df['S'].tolist()[0] / 3 * 4
+                        minfrac_mol['Old'] = comp_df['S'].tolist()[0] / 4
+                        comp_df['MgO'] = comp_df['MgO'].tolist()[0] - minfrac_mol['Nng'].tolist()[0]
+                        comp_df['CaO'] = comp_df['CaO'].tolist()[0] - minfrac_mol['Old'].tolist()[0]
                         comp_df['S'] = 0.00
         """
         3 Add MnO to FeO. 
@@ -1479,7 +1499,7 @@ class Particles:
         if verboseCIPW:
             print(f'#4\nP2O5 in columns? {"P2O5" in comp_df.columns.values.tolist()}')
         if 'P2O5' in comp_df.columns.values.tolist():
-            minfrac['Ap'] = comp_df['P2O5'].tolist()[0] * 2 / 3
+            minfrac_mol['Ap'] = comp_df['P2O5'].tolist()[0] * 2 / 3
             comp_df['CaO'] = comp_df['CaO'] - comp_df['P2O5'] * 3.33
             comp_df['P2O5'] = 0.00
 
@@ -1489,7 +1509,7 @@ class Particles:
         if verboseCIPW:
             print(f'#5\nTiO2 in columns? {"TiO2" in comp_df.columns.values.tolist()}')
         if 'TiO2' in comp_df.columns.values.tolist():
-            minfrac['Ilm'] = comp_df['TiO2'].tolist()[0]
+            minfrac_mol['Ilm'] = comp_df['TiO2'].tolist()[0]
             comp_df['FeO'] = comp_df['FeO'].tolist()[0] - comp_df['TiO2'].tolist()[0]
             comp_df['TiO2'] = 0.00
 
@@ -1497,14 +1517,14 @@ class Particles:
         6 Magnetite: Subtract Fe2O3 from FeO. Put the Fe2O3 value in magnetite. Fe2O3 is now zero
         """
         # if 'Fe2O3' in comp_df.columns:
-        #     minfrac['Mt'] = comp_df['Fe2O3'].tolist()[0]
+        #     minfrac_mol['Mt'] = comp_df['Fe2O3'].tolist()[0]
         #     comp_df['FeO'] = comp_df['FeO'].tolist()[0] - comp_df['Fe2O3'].tolist()[0]
         #     comp_df['Fe2O3'] = 0.00
 
         """
         7 Orthoclase: Subtract K2O from Al2O3. Put the K2O value in orthoclase. K2O is now zero
         """
-        minfrac['Or'] = comp_df['K2O'].values
+        minfrac_mol['Or'] = comp_df['K2O'].values
         comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['K2O']
         comp_df['K2O'] = 0.00
 
@@ -1513,16 +1533,16 @@ class Particles:
                                 Retain the Na2O value for possible normative nepheline.
         """
         if comp_df['Na2O'].values > comp_df['Al2O3'].values:
-            minfrac['Ab'] = comp_df['Al2O3'].values
+            minfrac_mol['Ab'] = comp_df['Al2O3'].values
             Na2O_surplus = comp_df['Na2O'] - comp_df['Al2O3']
             comp_df['Al2O3'] = 0
             print(f'There is a Na2O surplus of {Na2O_surplus.values[0]:.2%}!')
         else:
-            minfrac['Ab'] = comp_df['Na2O'].values
+            minfrac_mol['Ab'] = comp_df['Na2O'].values
             comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['Na2O']
 
         if verboseCIPW:
-            print(f'#8\nAb = {minfrac["Ab"].tolist()[0]}')
+            print(f'#8\nAb = {minfrac_mol["Ab"].tolist()[0]}')
 
         """
         9 Anorthite:                       
@@ -1534,24 +1554,24 @@ class Particles:
             print(f'#9\nCaO = {comp_df["CaO"].tolist()[0]}')
             print(f'#9\nAl2O3 = {comp_df["Al2O3"].tolist()[0]}')
         if comp_df['Al2O3'].tolist()[0] <= comp_df['CaO'].tolist()[0]:
-            minfrac['An'] = comp_df['Al2O3'].tolist()[0]
+            minfrac_mol['An'] = comp_df['Al2O3'].tolist()[0]
             comp_df['CaO'] = comp_df['CaO'] - comp_df['Al2O3']
             comp_df['Al2O3'] = 0
             if verboseCIPW:
-                print(f'#9A\nAn = {minfrac["An"].tolist()[0]}')
+                print(f'#9A\nAn = {minfrac_mol["An"].tolist()[0]}')
 
         else:
-            minfrac['An'] = comp_df['CaO'].tolist()[0]
+            minfrac_mol['An'] = comp_df['CaO'].tolist()[0]
             comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['CaO']
             comp_df['CaO'] = 0
             if verboseCIPW:
-                print(f'#9B\nAn = {minfrac["An"].tolist()[0]}')
+                print(f'#9B\nAn = {minfrac_mol["An"].tolist()[0]}')
 
         """
         10 Corundum: If Al2O3 is not zero, put the remaining Al2O3 into corundum.                        
         """
         if comp_df['Al2O3'].tolist()[0] > 0:
-            minfrac['Cor'] = comp_df['Al2O3'].tolist()[0]
+            minfrac_mol['Cor'] = comp_df['Al2O3'].tolist()[0]
             comp_df['Al2O3'] = 0.0
 
             comp_df['CaO'] = comp_df['CaO'] - comp_df['Al2O3']
@@ -1584,22 +1604,22 @@ class Particles:
         # 14. Diopside: If CaO is not zero, subtract CaO from FMO. Put all CaO into diopside. CaO is now zero.
         # """
         # if comp_df['CaO'].tolist()[0] > 0:
-        #     minfrac['Di'] = comp_df['CaO'].tolist()[0]
+        #     minfrac_mol['Di'] = comp_df['CaO'].tolist()[0]
         #     FMO = FMO - comp_df['CaO'].tolist()[0]
         #     comp_df['CaO'] = 0.0
         """
         14a. Diopside: If CaO is not zero, set diopside as min(CaO,MgO) and subtract from FMO.                   
         """
         if comp_df['CaO'].tolist()[0] > 0:
-            minfrac['Di'] = min(comp_df['CaO'].tolist()[0], comp_df['MgO'].tolist()[0])
-            FMO = FMO - minfrac['Di'].tolist()[0]
-            comp_df['CaO'] = comp_df['CaO'].tolist()[0] - minfrac['Di'].tolist()[0]
+            minfrac_mol['Di'] = min(comp_df['CaO'].tolist()[0], comp_df['MgO'].tolist()[0])
+            FMO = FMO - minfrac_mol['Di'].tolist()[0]
+            comp_df['CaO'] = comp_df['CaO'].tolist()[0] - minfrac_mol['Di'].tolist()[0]
 
         """
         14b. Diopside: If CaO is not zero, set diopside as min(CaO,MgO) and subtract from MgO.                   
         """
         if comp_df['CaO'].tolist()[0] > 0:
-            minfrac['Wo'] = comp_df['CaO'].tolist()[0]
+            minfrac_mol['Wo'] = comp_df['CaO'].tolist()[0]
             comp_df['CaO'] = 0.0
 
         """
@@ -1608,9 +1628,9 @@ class Particles:
         """
 
         if FMO > 0:
-            minfrac['Opx'] = FMO
-            minfrac['En'] = FMO * Mg_nbr
-            minfrac['Fs'] = FMO * (1 - Mg_nbr)
+            minfrac_mol['Opx'] = FMO
+            minfrac_mol['En'] = FMO * Mg_nbr
+            minfrac_mol['Fs'] = FMO * (1 - Mg_nbr)
 
         """
         16. Calculate the amount of SiO2 needed for all of the normative silicates listed above, allotting SiO2 as follows:
@@ -1621,12 +1641,12 @@ class Particles:
             Orthopyroxene * 1 = needed SiO2 for each Hypersthene
         """
 
-        SiO2_Or = minfrac['Or'] * 6
-        SiO2_Ab = minfrac['Ab'] * 6
-        SiO2_An = minfrac['An'] * 2
-        SiO2_Di = minfrac['Di'] * 2
-        SiO2_Wo = minfrac['Wo'] * 1
-        SiO2_Opx = minfrac['Opx'] * 1
+        SiO2_Or = minfrac_mol['Or'] * 6
+        SiO2_Ab = minfrac_mol['Ab'] * 6
+        SiO2_An = minfrac_mol['An'] * 2
+        SiO2_Di = minfrac_mol['Di'] * 2
+        SiO2_Wo = minfrac_mol['Wo'] * 1
+        SiO2_Opx = minfrac_mol['Opx'] * 1
 
         """
         17. Sum the five SiO2 values just calculated, and call this number pSi1 for the first provisional SiO2.
@@ -1645,7 +1665,7 @@ class Particles:
         """
 
         if comp_df['SiO2'].values < pSi1:
-            minfrac['Qz'] = 0.00
+            minfrac_mol['Qz'] = 0.00
             """
             19. -> 20. Sum the four SiO2 values just calculated to get pSi2. Subtract pSi2 from SiO2 to get the
             of SiO2 available for olivine and orthopyroxene, called pSi3.
@@ -1665,12 +1685,12 @@ class Particles:
             if FMO >= 2 * pSi3:
                 if verboseCIPW: print(
                     'Total Fe+Mg is greater equal to two times the SiO2 remaining after forming Or, Ab, An and Di ')
-                minfrac['Ol'] = FMO
-                minfrac['Fo'] = minfrac['Ol'].tolist()[0] * FMO
-                minfrac['Fa'] = minfrac['Ol'].tolist()[0] * (1 - FMO)
-                minfrac['Opx'] = 0.00
-                minfrac['En'] = 0.00
-                minfrac['Fs'] = 0.00
+                minfrac_mol['Ol'] = FMO
+                minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * FMO
+                minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - FMO)
+                minfrac_mol['Opx'] = 0.00
+                minfrac_mol['En'] = 0.00
+                minfrac_mol['Fs'] = 0.00
                 FMO = 0
 
                 """
@@ -1678,7 +1698,7 @@ class Particles:
                 in #20A did not yield enough silica to make orthoclase, albite, anorthite, diopside, and
                 olivine.                 """
 
-                SiO2_Ol = 0.5 * minfrac['Ol']
+                SiO2_Ol = 0.5 * minfrac_mol['Ol']
 
                 """
                 22. Sum the three SiO2 values just calculated to get pSi4. Subtract pSi4 from SiO2 to get
@@ -1689,39 +1709,39 @@ class Particles:
                 pSi4 = SiO2_Or.tolist()[0] + SiO2_An.tolist()[0] + SiO2_Di.tolist()[0] + SiO2_Ol.tolist()[0] + \
                        SiO2_Wo.tolist()[0]
                 pSi5 = comp_df['SiO2'].tolist()[0] - pSi4
-                minfrac['Ab'] = (pSi5 - (2 * comp_df['Na2O'].tolist()[0])) / 4
+                minfrac_mol['Ab'] = (pSi5 - (2 * comp_df['Na2O'].tolist()[0])) / 4
                 if verboseCIPW:
-                    print(f'#22\nAb = {minfrac["Ab"].tolist()[0]}')
-                minfrac['Nph'] = comp_df['Na2O'].tolist()[0] - minfrac['Ab'].tolist()[0]
+                    print(f'#22\nAb = {minfrac_mol["Ab"].tolist()[0]}')
+                minfrac_mol['Nph'] = comp_df['Na2O'].tolist()[0] - minfrac_mol['Ab'].tolist()[0]
 
             elif FMO < 2 * pSi3:
                 if verboseCIPW:
                     print('Total Fe+Mg is less than two time the SiO2 remaining after forming Or, Ab, An and Di ')
-                minfrac['Nph'] = 0.00
-                minfrac['Opx'] = (2 * pSi3) - FMO
-                minfrac['En'] = ((2 * pSi3) - FMO) * Mg_nbr
-                minfrac['Fs'] = ((2 * pSi3) - FMO) * (1 - Mg_nbr)
-                minfrac['Ol'] = FMO - minfrac['Opx'].tolist()[0]
-                minfrac['Fo'] = minfrac['Ol'].tolist()[0] * FMO
-                minfrac['Fa'] = minfrac['Ol'].tolist()[0] * (1 - FMO)
+                minfrac_mol['Nph'] = 0.00
+                minfrac_mol['Opx'] = (2 * pSi3) - FMO
+                minfrac_mol['En'] = ((2 * pSi3) - FMO) * Mg_nbr
+                minfrac_mol['Fs'] = ((2 * pSi3) - FMO) * (1 - Mg_nbr)
+                minfrac_mol['Ol'] = FMO - minfrac_mol['Opx'].tolist()[0]
+                minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * FMO
+                minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - FMO)
 
         elif pSi1 < comp_df['SiO2'].tolist()[0]:
-            minfrac['Nph'] = 0
-            minfrac['Ol'] = 0
+            minfrac_mol['Nph'] = 0
+            minfrac_mol['Ol'] = 0
             comp_df['SiO2'] = comp_df['SiO2'] - pSi1
-            minfrac['Qz'] = comp_df['SiO2'].tolist()[0]
+            minfrac_mol['Qz'] = comp_df['SiO2'].tolist()[0]
             comp_df['SiO2'] = 0.0
         """
         23. Multiply orthoclase, albite, and nepheline by two. Divide olivine by two
         """
-        minfrac['Or'] = minfrac['Or'].tolist()[0] * 2
-        minfrac['Ab'] = minfrac['Ab'].tolist()[0] * 2
-        minfrac['Nph'] = minfrac['Nph'].tolist()[0] * 2
-        minfrac['Ol'] = minfrac['Ol'].tolist()[0] / 2
-        minfrac['Fo'] = minfrac['Ol'].tolist()[0] * FMO
-        minfrac['Fa'] = minfrac['Ol'].tolist()[0] * (1 - FMO)
+        minfrac_mol['Or'] = minfrac_mol['Or'].tolist()[0] * 2
+        minfrac_mol['Ab'] = minfrac_mol['Ab'].tolist()[0] * 2
+        minfrac_mol['Nph'] = minfrac_mol['Nph'].tolist()[0] * 2
+        minfrac_mol['Ol'] = minfrac_mol['Ol'].tolist()[0] / 2
+        minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * FMO
+        minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - FMO)
         if verboseCIPW:
-            print(f'#23\nAb = {minfrac["Ab"].tolist()[0]}')
+            print(f'#23\nAb = {minfrac_mol["Ab"].tolist()[0]}')
         """
         24. Calculate An number, which is the Ca/(Ca+Na) ratio in normative plagioclase:
         """
@@ -1731,11 +1751,11 @@ class Particles:
         """
         25. Plagioclase: Add albite to anorthite to make plagioclase. Retain the albite value, anorthite is now zero.
         """
-        minfrac['Plag'] = minfrac['Ab'].tolist()[0] + minfrac['An'].tolist()[0]
+        minfrac_mol['Plag'] = minfrac_mol['Ab'].tolist()[0] + minfrac_mol['An'].tolist()[0]
         if verboseCIPW:
-            print(f'#25\nAb = {minfrac["Ab"].tolist()[0]}')
-            print(f'An = {minfrac["An"].tolist()[0]}')
-            print(minfrac['Plag'].tolist()[0])
+            print(f'#25\nAb = {minfrac_mol["Ab"].tolist()[0]}')
+            print(f'An = {minfrac_mol["An"].tolist()[0]}')
+            print(minfrac_mol['Plag'].tolist()[0])
 
         """
         25. Calculate the formula weight of plagioclase, using the An number value from #24
@@ -1747,61 +1767,40 @@ class Particles:
         """
         Obtain minfrac for comparison with CIPW (in wt%)
         """
-        minfrac_CIPW_wt = minfrac.mul(pd.Series(amu_min_dict))
-        minfrac_CIPW_wt = minfrac_CIPW_wt.fillna(0)
+        minfrac_CIPW_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
         minfrac_CIPW_wt.drop(['Ab', 'An', 'Fo', 'Fa', 'En', 'Fs', 'Wo'], inplace=True, axis=1)
-        minfrac_CIPW_wt = minfrac_CIPW_wt.T
-        minfrac_CIPW_wt = minfrac_CIPW_wt.loc[(minfrac_CIPW_wt != 0.0).any(axis=1)]
-        minfrac_CIPW_wt = minfrac_CIPW_wt / minfrac_CIPW_wt.sum(axis=0).values[0]
+        minfrac_CIPW_wt = normalize_df(minfrac_CIPW_wt)
 
         if verboseCIPW:
             print(f'\nCIPW weight fractions:\n{minfrac_CIPW_wt}')
             print(f'Total: {minfrac_CIPW_wt.sum()[0]:0.2f}')
 
-        """
-        Obtain minfrac for mass balancing density
-        """
-        minfrac_wt = minfrac.mul(pd.Series(amu_min_dict))
-        minfrac_wt = minfrac_wt.fillna(0)
-        minfrac_wt.drop(['Plag', 'Ol', 'Opx'], inplace=True, axis=1)
-        minfrac_wt = minfrac_wt.T
-        minfrac_wt = minfrac_wt.loc[(minfrac_wt != 0.0).any(axis=1)]
-        minfrac_wt = minfrac_wt / minfrac_wt.sum(axis=0).values[0]
 
-        print(f'\nWeight fractions:\n{minfrac_wt}')
-        print(f'Total: {minfrac_wt.sum().iloc[0]:0.2f}')
 
         """
-        Obtain mineralogy in vol%
+        Obtain mineralogy in wt% and vol%
         """
+        minfrac_mol.drop(['Plag', 'Ol', 'Opx'], inplace=True, axis=1)
+        minfrac_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
+        minfrac_vol = minfrac_wt.div(pd.Series(rho_min_dict))
 
-        minfrac_vol = minfrac.mul(pd.Series(amu_min_dict))
-        minfrac_vol = minfrac_vol.div(pd.Series(rho_min_dict))
-        minfrac_vol = minfrac_vol.fillna(0)
-        minfrac_vol.drop(['Plag', 'Ol', 'Opx'], inplace=True, axis=1)
-        minfrac_vol = minfrac_vol.T
-        minfrac_vol = minfrac_vol.loc[(minfrac_vol != 0.0).any(axis=1)]
-        minfrac_vol = minfrac_vol/minfrac_vol.sum(axis=0).values[0]
+        print(minfrac_mol, minfrac_vol, minfrac_wt)
+
+        minfrac_mol, minfrac_vol, minfrac_wt = normalize_dfs([minfrac_mol, minfrac_vol, minfrac_wt])
+
+        print(f'\nVolume fractions:\n{minfrac_vol}')
+        print(f'Total: {minfrac_vol.sum().iloc[0]:0.2f}')
+
         if verboseCIPW:
-            print(f'\nVolume fractions:\n{minfrac_vol}')
-            print(f'Total: {minfrac_vol.sum()[0]:0.2f}')
+            print(f'\nWeight fractions:\n{minfrac_wt}')
+            print(f'Total: {minfrac_wt.sum().iloc[0]:0.2f}')
+            print(f'\nMolar fractions\n {minfrac_mol}')
+            print(f'Total: {minfrac_mol.sum().iloc[0]:0.2f}')
 
-        """
-        Obtain molar fraction of minerals; drop Plag, Ol and Opx 
-        """
-        minfrac.drop(['Plag', 'Ol', 'Opx'], inplace=True, axis=1)
-        minfrac = minfrac.T
-        minfrac = minfrac.loc[(minfrac != 0.0).any(axis=1)]
-        minfrac = minfrac / minfrac.sum(axis=0).values[0]
-
-        print(f'\nMolar fractions\n {minfrac}')
-        print(f'Total: {minfrac.sum().iloc[0]:0.2f}')
-
-        self.minfrac_df_molar = minfrac
-        self.minfrac_df_weight = minfrac_wt
+        self.minfrac_df_volume = minfrac_vol
         self.minfrac_df_weight_CIPW = minfrac_CIPW_wt
 
-        return minfrac
+        return minfrac_vol
 
     def systemdensity(self):
 
