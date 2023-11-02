@@ -1797,6 +1797,7 @@ class Particles:
             print(f'\nMolar fractions\n {minfrac_mol}')
             print(f'Total: {minfrac_mol.sum().iloc[0]:0.2f}')
 
+        self.minfrac_df_weight = minfrac_wt
         self.minfrac_df_volume = minfrac_vol
         self.minfrac_df_weight_CIPW = minfrac_CIPW_wt
 
