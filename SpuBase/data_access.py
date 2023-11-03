@@ -227,7 +227,8 @@ class Particles:
 
         self.rho_minerals_df = None
         self.minfrac_df_volume = None  # mineral fraction in volume%
-        self.minfrac_df_weight_CIPW = None  # mineral fraction in weight% with default CIPW mineralogy (one Ol, one Px)
+        self.minfrac_df_weight = None  # mineral fraction in wt%
+        self.minfrac_df_volume_CIPW = None  # mineral fraction in weight% with default CIPW mineralogy (one Ol, one Px)
         self.rho_system_df = None
         self.plotting_key = None  # color palette used for seaborn plots
         self.adist_df = None  # dataframe with angular distribution data
@@ -414,7 +415,6 @@ class Particles:
             self.minfrac_df_volume.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
 
         else:
-            print('no format passed')
             self.minfrac_df_volume = self.minfrac_df_volume.loc[:, (self.minfrac_df_volume != 0).any(axis=0)]
             self.minfrac_df_volume.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
 
@@ -596,7 +596,9 @@ class Particles:
         if self.isSummedUp and not self.return_amu_ion:
             self.particle_data_refit()
 
-        print(f'################# Data for {self.casename} created  #################')
+        print(
+              f'Data for {self.casename} created\n'
+              )
 
     def particle_data_impactor_refit(self, species, data_df, species_is_in_mineral, eckstein_df, iminfrac):
 
@@ -690,7 +692,7 @@ class Particles:
         phi_a = np.linspace(-np.pi, np.pi, num=nr_datapoints)
         energy_a = np.linspace(0, 500, num=nr_datapoints)
         self.refitparticledata_df = pd.DataFrame(columns=self.species_a)
-        print("Sum up particles from minerals and perform a re-fit\n"
+        print("\nSum up particles from minerals and perform a re-fit\n"
               "Process:")
         for ss, species in enumerate(self.species_a):
             print(f'{100 / len(self.species_a) * (ss+1):0.1f}% {species}')
@@ -893,8 +895,11 @@ class Particles:
         edist_loss_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
         adist_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
         if self.v_esc:
-            print(f'#### Loss Fraction #####')
-            print(f'Fraction exceeding v_esc of {self.v_esc} m/s:')
+            print(
+                  f'Loss fraction\n'
+                  f'(> {self.v_esc} m/s)'
+                  )
+            print()
         for ss, species in enumerate(self.species_a):
             iout_df_energy: DataFrame = pd.DataFrame(data=energy_a, columns=['energy'])
             iout_df_energy_loss: DataFrame = pd.DataFrame(columns=[species], index=['loss'])
@@ -996,7 +1001,9 @@ class Particles:
 
     def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, minfrac_scaling=True, title=None):
         if self.isVerbose:
-            print(f'######## Plotting {dist} distribution ########')
+            print(
+                  f'Plotting {dist} distribution'
+                  )
         if species_l == None:
             species_l = self.species_a
         """minfrac_scaling is to show all distribution with scaling by the mineral fraction of the surface"""
@@ -1266,7 +1273,9 @@ class Particles:
 
     def plot_yield(self, exp_H_data=None, exp_He_data=None, addTRIMdata=False):
         if self.isVerbose:
-            print('######## Plotting yield ########')
+            print(
+                  'Plotting yield'
+                  )
         params = {'legend.fontsize': 'large',
                   'figure.titlesize': 'x-large',
                   'figure.figsize': (6, 4.5),
@@ -1404,7 +1413,6 @@ class Particles:
         ** Sulfides: Add Mn, Cr, Ti, and Fe to Sulfur  
         """
         S_limit = 1e-5
-
         if verboseCIPW:
             print(f'#0\nS in columns? {"S" in comp_df.columns.values.tolist()}')
         if 'S' in comp_df.columns:
@@ -1686,8 +1694,6 @@ class Particles:
                 if verboseCIPW: print(
                     'Total Fe+Mg is greater equal to two times the SiO2 remaining after forming Or, Ab, An and Di ')
                 minfrac_mol['Ol'] = FMO
-                minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * FMO
-                minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - FMO)
                 minfrac_mol['Opx'] = 0.00
                 minfrac_mol['En'] = 0.00
                 minfrac_mol['Fs'] = 0.00
@@ -1722,8 +1728,8 @@ class Particles:
                 minfrac_mol['En'] = ((2 * pSi3) - FMO) * Mg_nbr
                 minfrac_mol['Fs'] = ((2 * pSi3) - FMO) * (1 - Mg_nbr)
                 minfrac_mol['Ol'] = FMO - minfrac_mol['Opx'].tolist()[0]
-                minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * FMO
-                minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - FMO)
+
+
 
         elif pSi1 < comp_df['SiO2'].tolist()[0]:
             minfrac_mol['Nph'] = 0
@@ -1738,8 +1744,11 @@ class Particles:
         minfrac_mol['Ab'] = minfrac_mol['Ab'].tolist()[0] * 2
         minfrac_mol['Nph'] = minfrac_mol['Nph'].tolist()[0] * 2
         minfrac_mol['Ol'] = minfrac_mol['Ol'].tolist()[0] / 2
-        minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * FMO
-        minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - FMO)
+        minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * Mg_nbr
+        minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - Mg_nbr)
+
+        # rho_min_dict['Ol'] = rho_min_dict['Fo'] * minfrac_mol['Fo'] + rho_min_dict['Fa'] * minfrac_mol['Fa']
+
         if verboseCIPW:
             print(f'#23\nAb = {minfrac_mol["Ab"].tolist()[0]}')
         """
@@ -1768,14 +1777,9 @@ class Particles:
         Obtain minfrac for comparison with CIPW (in wt%)
         """
         minfrac_CIPW_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
-        minfrac_CIPW_wt.drop(['Ab', 'An', 'Fo', 'Fa', 'En', 'Fs', 'Wo'], inplace=True, axis=1)
-        minfrac_CIPW_wt = normalize_df(minfrac_CIPW_wt)
-
-        if verboseCIPW:
-            print(f'\nCIPW weight fractions:\n{minfrac_CIPW_wt}')
-            print(f'Total: {minfrac_CIPW_wt.sum()[0]:0.2f}')
-
-
+        minfrac_CIPW_vol = minfrac_CIPW_wt.div(pd.Series(rho_min_dict))
+        minfrac_CIPW_vol.drop(['Ab', 'An', 'Fo', 'Fa', 'En', 'Fs', 'Wo'], inplace=True, axis=1)
+        minfrac_CIPW_vol = normalize_df(minfrac_CIPW_vol)
 
         """
         Obtain mineralogy in wt% and vol%
@@ -1784,20 +1788,21 @@ class Particles:
         minfrac_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
         minfrac_vol = minfrac_wt.div(pd.Series(rho_min_dict))
 
-        minfrac_mol, minfrac_vol, minfrac_wt = normalize_dfs([minfrac_mol, minfrac_vol, minfrac_wt])
+        minfrac_mol, minfrac_vol, minfrac_wt, minfrac_CIPW_vol = \
+            normalize_dfs([minfrac_mol, minfrac_vol, minfrac_wt, minfrac_CIPW_vol])
 
-        print(f'\nVolume fractions:\n{minfrac_vol}')
+        print(f'\nSpuBase modal abundances (vol%):\n{minfrac_vol}')
         print(f'Total: {minfrac_vol.sum().iloc[0]:0.2f}')
 
+
+
         if verboseCIPW:
-            print(f'\nWeight fractions:\n{minfrac_wt}')
-            print(f'Total: {minfrac_wt.sum().iloc[0]:0.2f}')
-            print(f'\nMolar fractions\n {minfrac_mol}')
-            print(f'Total: {minfrac_mol.sum().iloc[0]:0.2f}')
+            print(f'\nCIPW modal abundances (vol%):\n{minfrac_CIPW_vol}')
+            print(f'Total: {minfrac_CIPW_vol.sum().iloc[0]:0.2f}')
 
         self.minfrac_df_weight = minfrac_wt
         self.minfrac_df_volume = minfrac_vol
-        self.minfrac_df_weight_CIPW = minfrac_CIPW_wt
+        self.minfrac_df_volume_CIPW = minfrac_CIPW_vol
 
         return minfrac_vol
 
