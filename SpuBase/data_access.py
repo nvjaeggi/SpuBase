@@ -196,9 +196,10 @@ class Particles:
         # binding model - surface and bulk binding model (sbb)
         # component model - oxides (x)
         self.impactor = 'SW'  # default is solar wind 'SW', alternatives are 'H' and 'He'
-        if self.impactor == 'SW':
-            self.sulfur_diffusion = True
-            print(f'Sulfur diffusion: {self.sulfur_diffusion}')
+        self.sulfur_diffusion = True
+        if self.impactor != 'SW':
+            self.sulfur_diffusion = False
+            print(f'Sulfur diffusion was ignored because {self.impactor} != "SW"')
         self.sw_comp = [0.96, 0.04]  # solar wind composition. Default is 96% H+ and 4% He++
         self.update_impactor(self.impactor, self.sw_comp)
         self.ekin = {'H': 1000, 'He': 4000}  # dictionary of impactor energies (eV) in database
