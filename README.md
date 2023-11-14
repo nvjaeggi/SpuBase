@@ -8,8 +8,17 @@ See the Jupyter notebook tutorials in the package directory `docs/`.
 
 You are encouraged to fork this repository or create your own branch to add new features. You will need to issue a pull request to be able to merge your code into the main branch.
 
-## Installation for use
-I recommend creating a pyton environment which is independent of whatever environment you are normally working from to prevent messing up dependencies. I further recommend Anaconda for this task. 
+## Installation with pip
+**This way of installation is fast, but it will be installed into your main python environment and is therefore not recommended.**
+
+1. Install [Poetry](https://python-poetry.org) (used as build back-end) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/), or `pip install poetry` if you do not intend to use Poetry with a virtual environment.
+
+2. Install *SpuBase* using pip. 
+   ```
+   pip3 install -e <path_to_SpuBase_main_folder>
+   ```
+## Installation into anaconda environment
+I recommend creating a Python environment which is independent of whatever environment you are normally working from to prevent messing up dependencies. I further recommend Anaconda for this task. 
 1. [Install Anaconda](https://docs.anaconda.com/free/anaconda/install/)
 2. Create or update a conda environment by running either (this may take a while):
     ```
@@ -19,9 +28,10 @@ I recommend creating a pyton environment which is independent of whatever enviro
     ```
     conda env update -f environment.yml
     ```
-
-   If you want to get FutureWarning errors from seaborn, ensure you install `seaborn>=0.13.0` with pip into the _active_ conda environment: 
-   * `pip install seaborn==0.13.0`
+3. Install SpuBase using pip. 
+   ```
+   pip3 install -e <path_to_SpuBase_main_folder>
+   ``` 
 
 ## Demonstration
 #### Determine path to Jupyter Notebooks
@@ -41,7 +51,7 @@ This will report the location of the *SpuBase* package on your system, from whic
 #### Running Jupyter Notebooks
 1. When located within the *SpuBase* location, you can access the Jupyter notebook tutorials with:
     ```
-    jupyter notebook /docs/<FILENAME>.ipynb
+    jupyter notebook SpuBase/docs/<FILENAME>.ipynb
     ```
     with `<Filename>` being either `0_Mineral_fractions` or `1_Surface_compositions`.
     * An alternative to changing directories is to give the absolute path to the notebook you want to open instead.

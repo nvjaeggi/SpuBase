@@ -2,8 +2,11 @@ name: spubase
 dependencies:
   - python=3.10.*
   - scipy = 1.11.*
-  - numpy = 1.26.*
+  - numpy = 1.23.*
   - pandas = 2.1.*
   - jupyter
   - matplotlib = 3.8.*
-  - seaborn
+  - pip
+  - pip:
+    - seaborn==0.13.0
+    - poetry
