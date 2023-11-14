@@ -25,7 +25,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 # import argparse
 from pandas import DataFrame
 
-
 def invpairdiff(lst):
     f_lst = lst.astype(float)  # floats are required for "** (-1)" tp work
     length = len(lst)
@@ -189,7 +188,8 @@ def normalize_dfs(df_a):
 
 class Particles:
     def __init__(self, verbose=False, show_plot=False):
-
+        self.maindir = os.path.dirname(os.path.realpath(__file__))
+        self.tabledir = os.path.join(self.maindir, 'tables')
         # --- DATA MODEL ---
         self.sfx = None
         self.update_model('sbb', 'x')
@@ -247,22 +247,22 @@ class Particles:
         self.params = ['phi_k', 'phi_tilt', 'phi_m', 'phi_n', 'energy_k', 'energy_e']
 
         # dictionaries and table data
-        self.mindict_df_atoms = pd.read_csv('tables/minerals_atoms.txt', header=0, index_col=0)
-        table_dir_atoms = "tables/table1.txt"  # table for atomic properties; adapted from standard SDTrimSP table
+        self.mindict_df_atoms = pd.read_csv(os.path.join(self.tabledir,'minerals_atoms.txt'), header=0, index_col=0)
+        table_dir_atoms = os.path.join(self.tabledir,"table1.txt")  # table for atomic properties; adapted from standard SDTrimSP table
         self.at_density_df_atoms = pd.read_csv(table_dir_atoms, sep="\s+", usecols=['atomic_density'], index_col=0,
                                                skiprows=10, encoding='latin-1')
-        table_dir_minerals = "tables/rho_minerals.txt"
+        table_dir_minerals = os.path.join(self.tabledir,"rho_minerals.txt")
         self.wt_density_df_minerals = pd.read_csv(table_dir_minerals, sep="\s+", header=0,
                                                   index_col=0, encoding='latin-1')
         self.wt_density_df_minerals_dic = self.wt_density_df_minerals.T.to_dict('index')['g/cm3']
-        self.mindict_df_oxides = pd.read_csv('tables/minerals_oxides.txt', header=0, index_col=0)
-        table_dir_oxides = "tables/table_compound.txt"  # table for oxide properties from standard SDTrimSP table
+        self.mindict_df_oxides = pd.read_csv(os.path.join(self.tabledir,'minerals_oxides.txt'), header=0, index_col=0)
+        table_dir_oxides = os.path.join(self.tabledir,"table_compound.txt")  # table for oxide properties from standard SDTrimSP table
         self.oxides_df = pd.read_csv(table_dir_oxides, sep="\s+", index_col=0, skiprows=5, encoding='latin-1')
         self.at_density_df_oxides = self.oxides_df['atomic_density']
 
-        self.amu_elements = pd.read_csv('tables/amu_elements.txt', index_col=0, header=0, delim_whitespace=True)
-        self.amu_oxides = pd.read_csv('tables/amu_oxides.txt', index_col=0, header=0, delim_whitespace=True)
-        self.amu_minerals = pd.read_csv('tables/amu_minerals.txt', index_col=0, header=0, delim_whitespace=True)
+        self.amu_elements = pd.read_csv(os.path.join(self.tabledir,'amu_elements.txt'), index_col=0, header=0, delim_whitespace=True)
+        self.amu_oxides = pd.read_csv(os.path.join(self.tabledir,'amu_oxides.txt'), index_col=0, header=0, delim_whitespace=True)
+        self.amu_minerals = pd.read_csv(os.path.join(self.tabledir,'amu_minerals.txt'), index_col=0, header=0, delim_whitespace=True)
 
         self.amu_dic = self.amu_elements.T.to_dict('index')['amu']
         self.amu_oxides_dic = self.amu_oxides.T.to_dict('index')['amu']
@@ -270,7 +270,6 @@ class Particles:
 
         # --- DIRECTORIES ---
         self.casename = ''
-        self.maindir = os.path.abspath(os.curdir)
         self.outdir = self.maindir
         curdir = os.path.abspath(os.curdir)
         self.DBdir = os.path.abspath(curdir)
@@ -1368,7 +1367,7 @@ class Particles:
 
         comp_df = pd.DataFrame(data=comp_frac_l, columns=['at%'], index=comp_l)
 
-        species_dict_dir = 'tables/species_dict.txt'
+        species_dict_dir = os.path.join(self.tabledir,'species_dict.txt')
         species_df = pd.read_csv(species_dict_dir, header=0, delim_whitespace=True)
         species_dict = {species_df['metal'].values[i]: species_df['species'].values[i] for i in
                         range(len(species_df['species'].values))}

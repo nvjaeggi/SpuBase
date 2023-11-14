@@ -3,7 +3,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
-name = "SpuBase"
+name = "spubase"
 version = "0.1.0"
 description = "Accesses ion sputter data and returns the angular distribution, energy distribution, speciation and quantity of ejecta."
 authors = ["Noah Jäggi <nvjaeggi@users.noreply.github.com>"]
