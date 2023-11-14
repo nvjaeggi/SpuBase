@@ -9,8 +9,8 @@ See the Jupyter notebook tutorials in the package directory `docs/`.
 You are encouraged to fork this repository or create your own branch to add new features. You will need to issue a pull request to be able to merge your code into the main branch.
 
 ## Installation with pip
-[!WARNING]
-This way of installation is fast, but it will be installed into your main python environment, fails if you use an unsupported python version and is therefore not recommended.
+> [!WARNING]
+> This way of installation is fast, but it will be installed into your main python environment, fails if you use an unsupported python version and is therefore not recommended.
 
 1. Install [Poetry](https://python-poetry.org) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/), or `pip install poetry` if you do not intend to use *Poetry* with a virtual environment.
    ```
