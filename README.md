@@ -22,7 +22,7 @@ You are encouraged to fork this repository or create your own branch to add new 
 1. Clone this repository (*SpuBase*) to a local directory
 2. Move to the repository folder and install *SpuBase* using pip 
    ```
-   python -m pip install -e .
+   python3 -m pip install -e .
    ``` 
 ## Installation into anaconda environment
 I recommend creating a Python environment which is independent of whatever environment you are normally working from to prevent messing up dependencies. I further recommend Anaconda for this task. 
@@ -43,24 +43,23 @@ I recommend creating a Python environment which is independent of whatever envir
     ```
     conda env update -f environment.yml
     ```
-1. Clone this repository (*SpuBase*) to a local directory
-3. Move to the repository folder and install *SpuBase* using pip 
+3. Clone this repository (*SpuBase*) to a local directory
+4. Move to the repository folder and install *SpuBase* using pip 
    ```
-   python -m pip install -e .
+   python3 -m pip install -e .
    ``` 
 
 ## Demonstration
 #### Determine path to Jupyter Notebooks
-1. To locate the example Jupyter notebooks, enter python:
-
+1. To locate the example Jupyter notebooks, enter Python:
     ```
     python
     ````
 2. Once in python type: 
 
     ```
-    import SpuBase
-    SpuBase.__file__
+    import spubase
+    spubase.__file__
     ```
 This will report the location of the *SpuBase* package on your system, from which you can determine the path to *SpuBase/docs*. This directory contains the Jupyter notebook tutorials, which you can copy to a different location if you wish. Then, exit the Python command line using `exit()`.
 
@@ -89,7 +88,7 @@ To work with poetry, we want to set up a virtual Python environment in the root 
 1. Clone this repository (*SpuBase*) to a local directory
 2. Create a virtual environment by using the terminal (you can also use the terminal in your IDE of preference). This command will create a local Python environment in the `.venv` directory:
     ```
-    python -m venv .venv
+    python3 -m venv .venv
     ```
 4. Now either install *SpuBase* into your virtual environment:
    1. activate the virtual environment
@@ -161,6 +160,14 @@ To work with poetry, we want to set up a virtual Python environment in the root 
     poetry install
     ```
 
+### Commonm Errors
+
+> ModuleNotFoundError: No module named ‘setuptools’
+
+Try installing setuptools for pip (even if setuptools is found for python3)
+   ```
+   pip install --user pip setuptools wheel
+   ```
 [//]: # (To ensure that all developers are using the same settings for linting and formatting &#40;e.g., using pylint, black, isort, as installed as extensions in step 2&#41; there is a `settings.json` file in the `.vscode` directory. These settings will take precedence over your user settings for this project only.)
 
 [//]: # (1. In VSCode you are recommended to install the following extensions:)
