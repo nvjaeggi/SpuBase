@@ -1,4 +1,4 @@
-"""Sputter Database (SpuBase) class to access data stored in /data
+"""Sputter Database (spubase) class to access data stored in /data
 
 See the LICENSE file for licensing information.
 """
@@ -1791,7 +1791,7 @@ class Particles:
         minfrac_mol, minfrac_vol, minfrac_wt, minfrac_CIPW_vol = \
             normalize_dfs([minfrac_mol, minfrac_vol, minfrac_wt, minfrac_CIPW_vol])
 
-        print(f'\nSpuBase modal abundances (vol%):\n{minfrac_vol}')
+        print(f'\nspubase modal abundances (vol%):\n{minfrac_vol}')
         print(f'Total: {minfrac_vol.sum().iloc[0]:0.2f}')
 
 
