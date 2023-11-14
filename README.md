@@ -9,17 +9,24 @@ See the Jupyter notebook tutorials in the package directory `docs/`.
 You are encouraged to fork this repository or create your own branch to add new features. You will need to issue a pull request to be able to merge your code into the main branch.
 
 ## Installation with pip
-**This way of installation is fast, but it will be installed into your main python environment and is therefore not recommended.**
+[!WARNING]
+This way of installation is fast, but it will be installed into your main python environment, fails if you use an unsupported python version and is therefore not recommended.
 
-1. Install [Poetry](https://python-poetry.org) (used as build back-end) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/), or `pip install poetry` if you do not intend to use *Poetry* with a virtual environment.
-
+1. Install [Poetry](https://python-poetry.org) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/), or `pip install poetry` if you do not intend to use *Poetry* with a virtual environment.
+   ```
+   pipx install poetry
+   ```
 2. Install *SpuBase* using pip. 
    ```
-   pip3 install -e <path_to_SpuBase_main_folder>
+   python3 -m pip install -e <path_to_SpuBase_main_folder>
    ```
 ## Installation into anaconda environment
 I recommend creating a Python environment which is independent of whatever environment you are normally working from to prevent messing up dependencies. I further recommend Anaconda for this task. 
-1. [Install Anaconda](https://docs.anaconda.com/free/anaconda/install/)
+1. Install [Poetry](https://python-poetry.org) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/).
+   ```
+   pipx install poetry
+   ```
+2. [Install Anaconda](https://docs.anaconda.com/free/anaconda/install/)
 2. Create or update a conda environment by running either (this may take a while):
     ```
     conda env create -n SpuBase -f environment.yml  
@@ -30,7 +37,7 @@ I recommend creating a Python environment which is independent of whatever envir
     ```
 3. Install SpuBase using pip. 
    ```
-   pip3 install -e <path_to_SpuBase_main_folder>
+   python3 -m pip install -e <path_to_SpuBase_main_folder>
    ``` 
 
 ## Demonstration
