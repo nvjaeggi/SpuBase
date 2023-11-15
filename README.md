@@ -40,12 +40,12 @@ You are encouraged to fork this repository or create your own branch to add new 
     import spubase
     spubase.__file__
     ```
-This will report the location of the *SpuBase* package on your system, from which you can determine the path to *SpuBase/docs*. This directory contains the Jupyter notebook tutorials, which you can copy to a different location if you wish. Then, exit the Python command line using `exit()`.
+This will report the location of the *spubase* package on your system, from which you can determine the path to *spubase/docs*. This directory contains the Jupyter notebook tutorials, which you can copy to a different location if you wish. Then, exit the Python command line using `exit()`.
 
 #### Running Jupyter Notebooks
-1. When located within the *SpuBase* location, you can access the Jupyter notebook tutorials with:
+1. When located within the *SpuBase* folder, you can access the Jupyter notebook tutorials with:
     ```
-    jupyter notebook SpuBase/docs/<FILENAME>.ipynb
+    jupyter notebook spubase/docs/<FILENAME>.ipynb
     ```
     with `<Filename>` being either `0_Mineral_fractions` or `1_Surface_compositions`.
     * An alternative to changing directories is to give the absolute path to the notebook you want to open instead.
