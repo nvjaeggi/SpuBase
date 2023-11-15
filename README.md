@@ -10,50 +10,29 @@ You are encouraged to fork this repository or create your own branch to add new 
 
 ## Installation with pip
 > [!WARNING]
-> This way of installation is fast, but it will be installed into your main python environment, fails if you use an unsupported python version and is therefore not recommended.
+> If you do not create a virtual environment, *SpuBase* and its dependencies will be installed into your main python environment and can mess up your other projects. Without a virtual environment this approach fails if you use an unsupported python version (<3.10) and is therefore not recommended.
 
-[//]: # (1. Install [Poetry]&#40;https://python-poetry.org&#41; if you do not already have it, preferentially using [pipx]&#40;https://pypa.github.io/pipx/installation/&#41;, or `pip install poetry` if you do not intend to use Poetry with a virtual environment.)
-
-[//]: # (   ```)
-
-[//]: # (   pipx install poetry)
-
-[//]: # (   ```)
 1. Clone this repository (*SpuBase*) to a local directory
-2. Move to the repository folder and install *SpuBase* using pip 
+2. Move to the repository folder
+3. **Recommended:**
+   1. Create a virtual environment by using the terminal (you can also use the terminal in your IDE of preference). This command will create a local Python environment in the `.spubase_venv` directory:
+       ```
+       python3 -m venv .spubase_venv
+       ```
+   2. activate the virtual environment
+      ```
+      source .spubase_venv/bin/activate
+      ```
+4. Install *SpuBase* using pip: 
    ```
    python3 -m pip install -e .
-   ``` 
-## Installation into anaconda environment
-I recommend creating a Python environment which is independent of whatever environment you are normally working from to prevent messing up dependencies. I further recommend Anaconda for this task. 
-
-[//]: # (1. Install [Poetry]&#40;https://python-poetry.org&#41; if you do not already have it, preferentially using [pipx]&#40;https://pypa.github.io/pipx/installation/&#41;.)
-
-[//]: # (   ```)
-
-[//]: # (   pipx install poetry)
-
-[//]: # (   ```)
-1. [Install Anaconda](https://docs.anaconda.com/free/anaconda/install/)
-2. Create or update a conda environment by running either (this may take a while):
-    ```
-    conda env create -n SpuBase -f environment.yml  
-    ```
-    or, if you update an already active environment use:
-    ```
-    conda env update -f environment.yml
-    ```
-3. Clone this repository (*SpuBase*) to a local directory
-4. Move to the repository folder and install *SpuBase* using pip 
    ```
-   python3 -m pip install -e .
-   ``` 
-
+   
 ## Demonstration
 #### Determine path to Jupyter Notebooks
 1. To locate the example Jupyter notebooks, enter Python:
     ```
-    python
+    python3
     ````
 2. Once in python type: 
 
@@ -71,96 +50,123 @@ This will report the location of the *SpuBase* package on your system, from whic
     with `<Filename>` being either `0_Mineral_fractions` or `1_Surface_compositions`.
     * An alternative to changing directories is to give the absolute path to the notebook you want to open instead.
 
-4. In the Jupyter notebook window you may have to *trust* the notebook for all features to work.
+2. In the Jupyter notebook window you may have to *trust* the notebook for all features to work.
 
-## Installation for Development
+# Alternative ways of installation 
+
+## Installation into Anaconda environment
+Similar to the pip installation, I recommend using Anaconda to create a Python environment with advanced functionality. 
+
+1. [Install Anaconda](https://docs.anaconda.com/free/anaconda/install/)
+2. Clone this repository (*SpuBase*) to a local directory
+3. Move to the repository folder
+4. Create or update a conda environment by running either (this may take a while):
+    ```
+    conda env create -n SpuBase -f environment.yml  
+    ```
+    or, if you update an already active environment use:
+    ```
+    conda env update -f environment.yml
+    ```
+
+5. Activate the Anaconda environment with
+   ```
+   conda activate SpuBase
+   ```
+6. Install *SpuBase* using pip 
+   ```
+   python3 -m pip install -e .
+   ``` 
+
+
+## Installation for Development (Poetry)
 
 You do not have to use any of the suggested IDEs or the Poetry (Python packaging and dependency manager), but using them makes it easier to develop *SpuBase* as a community. If you use a different IDE, please send me your installation instructions and it will be added to this README.
 
-To work with poetry, we want to set up a virtual Python environment in the root directory of *SpuBase*. An advantage of using a virtual environment is that it remains completely isolated from any other Python environments on your system (e.g. Conda or otherwise). You must have a Python interpreter available to build the virtual environment according to the dependency in `pyproject.toml`, which could be a native version on your machine or a version from a Conda environment that is currently active. You only need a Python binary, so it is not required to install any packages.
+To work with poetry, we want to set up a virtual Python environment in the root directory of *SpuBase*. An advantage of using a virtual environment is that it remains completely isolated from any other Python environments on your system (e.g. Conda or otherwise). You must have a Python interpreter available to build the virtual environment according to the dependency in `pyproject.toml`, which could be a native version on your machine or a version from an Anaconda environment that is currently active. You only need a Python binary, so it is not required to install any packages.
 
-### Linux installation 
+### Linux 
 
 1. Install [Poetry](https://python-poetry.org) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/).
    ```
    pipx install poetry
    ```
-1. Clone this repository (*SpuBase*) to a local directory
-2. Create a virtual environment by using the terminal (you can also use the terminal in your IDE of preference). This command will create a local Python environment in the `.venv` directory:
+2. Clone this repository (*SpuBase*) to a local directory
+3. Create a virtual environment by using the terminal (you can also use the terminal in your IDE of preference). This command will create a local Python environment in the `.spubase_venv` directory:
     ```
-    python3 -m venv .venv
+    python3 -m venv .spubase_venv
     ```
 4. Now either install *SpuBase* into your virtual environment:
    1. activate the virtual environment
-   ```
-   source .venv/bin/activate
-   ```
+      ```
+      source .spubase_venv/bin/activate
+      ```
    2. Install *SpuBase* using Poetry, which will satisfy all required Python package dependencies:
-    ```
-    poetry install
-    ```
-3. or continue using an IDE:
+       ```
+       poetry install
+       ```
+5. or continue using an IDE:
    1. Create a poetry environment in your IDE of choice
       - In VSCode, go to *File* and *Open Folder...* and select the *SpuBase* directory
       - In PyCharm, add a new project and select the *SpuBase* directory 
-   3. Add the virtual Python environment as interpreter in your IDE.
-     - Open a new terminal window in VSCode and VSCode should recognise that you have a virtual environment in .venv, and load this environment automatically. 
+   2. Add the virtual Python environment as interpreter in your IDE.
+     - Open a new terminal window in VSCode and VSCode should recognise that you have a virtual environment in .spubase_venv, and load this environment automatically. 
      - PyCharm should recognize the virtual environment and the poetry `pyproject.toml` file and propose the installation. If not, manually set up a _Poetry Environment_ under _Add New Interpreter > Add Local Interpreter_. Obtain the installation path of poetry in PowerShell using  
         ```
         gcm poetry
         ```
-       You should now see `(.venv)` as the prefix in the terminal prompt.
+       You should now see `(.spubase_venv)` as the prefix in the terminal prompt.
 
 
-### Windows PowerShell installation 
-1. Install Python if you do not already have it. Powershell will open the windows store where python versions are free for download and install by typing.
+### Windows PowerShell 
+1. Install Python if you do not already have it. Powershell will open the Windows store where python versions are free for download and install by typing.
 	```
 	python
 	```
-1. Install [Poetry](https://python-poetry.org) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/).
+2. Install [Poetry](https://python-poetry.org) if you do not already have it, preferentially using [pipx](https://pypa.github.io/pipx/installation/).
    ```
    pipx install poetry
    ```
-1. Clone this repository (*SpuBase*) to a local directory
-1. Create a poetry environment in your IDE of choice
+3. Clone this repository (*SpuBase*) to a local directory
+4. Create a poetry environment in your IDE of choice
    - In VSCode, go to *File* and *Open Folder...* and select the *SpuBase* directory
    - In PyCharm, add a new project and select the *SpuBase* directory 
-2. Create a virtual environment by using the terminal (you can also use the terminal in your IDE of preference). This command will create a local Python environment in the `.venv` directory:
+5. Create a virtual environment by using the terminal (you can also use the terminal in your IDE of preference). This command will create a local Python environment in the `.spubase_venv` directory:
     ```
-    python -m venv .venv
+    python -m venv .spubase_venv
     ```
-3. Add the virtual Python environment as interpreter in your IDE.
-   - Open a new terminal window in VSCode and VSCode should recognise that you have a virtual environment in .venv, and load this environment automatically. 
+6. Add the virtual Python environment as interpreter in your IDE.
+   - Open a new terminal window in VSCode and VSCode should recognise that you have a virtual environment in .spubase_venv, and load this environment automatically. 
    - PyCharm should recognize the virtual environment and the poetry `pyproject.toml` file and propose the installation. If not, manually set up a _Poetry Environment_ under _Add New Interpreter > Add Local Interpreter_. Obtain the installation path of poetry in PowerShell using  
 	  ```
 	  gcm poetry
 	  ```
-   You should now see `(.venv)` as the prefix in the terminal prompt.
+   You should now see `(.spubase_venv)` as the prefix in the terminal prompt.
 
-8. If you are required to run Poetry manually in the IDE command prompt, do so with:
+7. If you are required to run Poetry manually in the IDE command prompt, do so with:
     ```
     poetry install
     ```
 
 ### MAC installation
-#### (VSCode)
+
 1. Install [VSCode](https://code.visualstudio.com) if you do not already have it.
-1. Install [Poetry](https://python-poetry.org) if you do not already have it.
-1. Clone this repository (*SpuBase*) to a local directory
-1. In VSCode, go to *File* and *Open Folder...* and select the *SpuBase* directory
-1. You can create a virtual environment by using the terminal in VSCode, where you may need to update `python` to reflect the location of the Python binary file. This will create a local Python environment in the `.venv` directory:
+2. Install [Poetry](https://python-poetry.org) if you do not already have it.
+3. Clone this repository (*SpuBase*) to a local directory
+4. In VSCode, go to *File* and *Open Folder...* and select the *SpuBase* directory
+5. You can create a virtual environment by using the terminal in VSCode, where you may need to update `python` to reflect the location of the Python binary file. This will create a local Python environment in the `.spubase_venv` directory:
 	
     ```
-    python -m venv .venv
+    python -m venv .spubase_venv
     ```
-1. Open a new terminal window in VSCode and VSCode should recognise that you have a virtual environment in .venv, and load this environment automatically. You should see `(.venv)` as the prefix in the terminal prompt.
-1. Install the project using poetry to install all the required Python package dependencies:
+6. Open a new terminal window in VSCode and VSCode should recognise that you have a virtual environment in .spubase_venv, and load this environment automatically. You should see `(.spubase_venv)` as the prefix in the terminal prompt.
+7. Install the project using poetry to install all the required Python package dependencies:
 
     ```
     poetry install
     ```
 
-### Commonm Errors
+### Common Errors
 
 > ModuleNotFoundError: No module named ‘setuptools’
 
