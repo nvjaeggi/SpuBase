@@ -8,9 +8,12 @@ See the Jupyter notebook tutorials in the package directory `docs/`.
 
 You are encouraged to fork this repository or create your own branch to add new features. You will need to issue a pull request to be able to merge your code into the main branch.
 
+> [!NOTE]
+> The installation instruction use `python` and `python3` as commands. If your `python` points to a Python 3 installation, you are free to use that command instead. See this [post on stack exchange](https://stackoverflow.com/questions/64801225/python-or-python3-what-is-the-difference) for a more in-depth explanation.
+
 ## Installation with pip
 > [!WARNING]
-> If you do not create a virtual environment, *SpuBase* and its dependencies will be installed into your main python environment and can mess up your other projects. Without a virtual environment this approach fails if you use an unsupported python version (<3.10) and is therefore not recommended.
+> If you do not create a virtual environment, *SpuBase* and its dependencies will be installed into your main Python environment and can mess up your other projects. Without a virtual environment this approach fails if you use an unsupported Python version (<3.10) and is therefore not recommended.
 
 1. Clone this repository (*SpuBase*) to a local directory
 2. Move to the repository folder
@@ -19,13 +22,13 @@ You are encouraged to fork this repository or create your own branch to add new 
        ```
        python3 -m venv .spubase_venv
        ```
-   2. activate the virtual environment
-      ```
-      source .spubase_venv/bin/activate
-      ```
+   2. activate the virtual environment 
+      * Linux: ``` source .spubase_venv/bin/activate```
+      * Windows: ``` .spubase_venv\Scripts\activate.ps1``` 
+
 4. Install *SpuBase* using pip: 
    ```
-   python3 -m pip install -e .
+   python3 -m pip install -e ./
    ```
    
 ## Demonstration
@@ -34,7 +37,7 @@ You are encouraged to fork this repository or create your own branch to add new 
     ```
     python3
     ````
-2. Once in python type: 
+2. Once in Python type: 
 
     ```
     import spubase
@@ -75,7 +78,7 @@ Similar to the pip installation, I recommend using Anaconda to create a Python e
    ```
 6. Install *SpuBase* using pip 
    ```
-   python3 -m pip install -e .
+   python3 -m pip install -e ./
    ``` 
 
 
@@ -119,7 +122,7 @@ To work with poetry, we want to set up a virtual Python environment in the root 
 
 
 ### Windows PowerShell 
-1. Install Python if you do not already have it. Powershell will open the Windows store where python versions are free for download and install by typing.
+1. Install Python if you do not already have it. Powershell will open the Windows store where Python versions are free for download and install by typing.
 	```
 	python
 	```
@@ -170,7 +173,7 @@ To work with poetry, we want to set up a virtual Python environment in the root 
 
 > ModuleNotFoundError: No module named ‘setuptools’
 
-Try installing setuptools for pip (even if setuptools is found for python3)
+Try installing setuptools for pip (even if setuptools is found for python/python3)
    ```
    pip install --user pip setuptools wheel
    ```
