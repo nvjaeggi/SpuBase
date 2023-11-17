@@ -173,10 +173,20 @@ To work with poetry, we want to set up a virtual Python environment in the root 
 
 > ModuleNotFoundError: No module named ‘setuptools’
 
-Try installing setuptools for pip (even if setuptools is found for python/python3)
+Try to upgrade setuptools
+
+   ```
+   pip install--upgrade setuptools
+   ```
+
+Or installing setuptools and wheel for pip on a user level (even if setuptools is found for python/python3)
+  
    ```
    pip install --user pip setuptools wheel
    ```
+
+
+
 [//]: # (To ensure that all developers are using the same settings for linting and formatting &#40;e.g., using pylint, black, isort, as installed as extensions in step 2&#41; there is a `settings.json` file in the `.vscode` directory. These settings will take precedence over your user settings for this project only.)
 
 [//]: # (1. In VSCode you are recommended to install the following extensions:)
