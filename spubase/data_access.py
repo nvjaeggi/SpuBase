@@ -190,6 +190,7 @@ class Particles:
     def __init__(self, verbose=False, show_plot=False):
         self.maindir = os.path.dirname(os.path.realpath(__file__))
         self.tabledir = os.path.join(self.maindir, 'tables')
+        
         # --- DATA MODEL ---
         self.sfx = None
         self.update_model('sbb', 'x')
@@ -206,6 +207,8 @@ class Particles:
         self.energy_impactor = None  # e_kin determined by database
         self.mass_impactor = None  # mass determined by database
 
+        self.v_esc = None  # 4300 m/s (Mercury); 2380 m/s (Moon)
+
         self.isSummedUp = True  # summs up particle data and returns single fit for composition
         self.return_amu_ion = False
 
@@ -218,12 +221,12 @@ class Particles:
         # --- DEBUGGING ---
         self.show_plot = show_plot
         self.isDebug = False
-        self.isVerbose = verbose
+        self.isVerbose = verbose  # SpuBase tells you what it's currently doing in detail
 
         # --- PLOTTING ---
-        self.logplot = False
-        self.plot_inset = False
-        self.file_format = None
+        self.logplot = False  # sets y-axis of plots to be a log 10 scale
+        self.plot_inset = False  # adds an inset for the energy distributions
+        self.file_format = None  
         self.update_file_format('png')
 
         self.rho_minerals_df = None
@@ -235,7 +238,6 @@ class Particles:
         self.adist_df = None  # dataframe with angular distribution data
         self.edist_df = None  # dataframe with energy distribution data
         self.edist_loss_df = None  # dataframe with loss fraction data relative to escape velocity
-        self.v_esc = None  # 4300 m/s (Mercury); 2380 m/s (Moon)
         self.species_a = None  # array of elements in system
         self.mineral_a = None  # array of minerals in system
         self.minfrac_a = None  # array of mineral fractions
@@ -801,7 +803,7 @@ class Particles:
         single_file_df = single_file_df.apply(pd.to_numeric, downcast='float').fillna(0)
         single_file_df.index = pd.to_numeric(single_file_df.index, downcast='integer')
 
-        export_path = os.path.join(self.outdir, f'{self.impactor}_{self.casename}_refit_particle_data.txt')
+        export_path = os.path.join(self.outdir, f'{self.impactor}_{self.casename}_particle_data.txt')
         single_file_df.to_csv(export_path,sep=',', float_format='{:.3E}'.format)
         if self.isVerbose:
             print(f'Data exported as .csv to {export_path}')
@@ -886,7 +888,7 @@ class Particles:
         nr_datapoints = 1000
         if energy_a is None:
             energy_a = np.linspace(0.1, e_max,
-                                   num=nr_datapoints)  # if no energy range is defined, 0.1 -> 100 eV are returned
+                                   num=nr_datapoints)  # if no energy range is defined, 0.1 -> 100 eV is used
             energy_bin = e_max / nr_datapoints
         phi_a = np.linspace(-np.pi, np.pi, num=nr_datapoints)  # full angular distribution is always necessary
         phi_bin = 2 * np.pi / nr_datapoints
@@ -999,14 +1001,14 @@ class Particles:
         self.edist_loss_df = edist_loss_df
         self.adist_df = adist_df
 
-    def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, minfrac_scaling=True, title=None):
+    def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, title=None):
         if self.isVerbose:
             print(
                   f'Plotting {dist} distribution'
                   )
         if species_l == None:
             species_l = self.species_a
-        """minfrac_scaling is to show all distribution with scaling by the mineral fraction of the surface"""
+
         params = {'legend.fontsize': 'large',
                   'figure.titlesize': 'x-large',
                   'axes.labelsize': 'large',
@@ -1073,12 +1075,6 @@ class Particles:
         """
         Return quantitative results.
         """
-        # Fraction is multiplied with
-        # - total ion ion_flux,
-        # - element sputter yield, and
-        # - mineral surface fraction
-        if self.isSummedUp:
-            minfrac_scaling = False  # self.yield_df is already scaled by mineral fraction
 
         i_ymax = 0
         labels = []
@@ -1146,12 +1142,7 @@ class Particles:
                 i_ymax = quant_dist.max().max()
 
         else:
-            if minfrac_scaling:
-                minfrac = self.minfrac_a
-            else:
-                minfrac = 1
             for col in quant_dist.columns:
-                quant_dist[col][0] *= minfrac
                 quant_dist[col][0].fillna(quant_dist[col][0].mode(), inplace=True)
                 quant_dist[col][0] = quant_dist[col][0].loc[:, (quant_dist[col][0] != 0).any(axis=0)]
                 sns.lineplot(ax=ax_dist,
@@ -1159,7 +1150,7 @@ class Particles:
                              palette=dict(self.plotting_key['color']),
                              dashes=True,  # dict(self.plotting_key['line']),
                              alpha=1.0)
-                if quant_dist[col][0].max()[0] >= i_ymax and dist == 'energy':
+                if quant_dist[col][0].max().iloc[0] >= i_ymax and dist == 'energy':
                     i_ymax = quant_dist[col][0].max().max()
 
         """
@@ -1271,7 +1262,7 @@ class Particles:
         plt.close(fig_dist)
         return fig_dist, ax_dist
 
-    def plot_yield(self, exp_H_data=None, exp_He_data=None, addTRIMdata=False):
+    def plot_yield(self, exp_H_data=None, exp_He_data=None):
         if self.isVerbose:
             print(
                   'Plotting yield'
