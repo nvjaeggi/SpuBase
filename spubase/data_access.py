@@ -209,7 +209,7 @@ class Particles:
 
         self.v_esc = None  # 4300 m/s (Mercury); 2380 m/s (Moon)
 
-        self.isSummedUp = True  # summs up particle data and returns single fit for composition
+        self.is_summed_up = True  # summs up particle data and returns single fit for composition
         self.return_amu_ion = False
 
         # --- OUTPUT ---
@@ -595,7 +595,7 @@ class Particles:
         yield_df = yield_df.fillna(0)
         self.yield_df = yield_df.loc[:, (yield_df != 0).any(axis=0)]  # drop all columns that are pure zeroes
 
-        if self.isSummedUp and not self.return_amu_ion:
+        if self.is_summed_up and not self.return_amu_ion:
             self.particle_data_refit()
 
         print(
@@ -874,14 +874,14 @@ class Particles:
         # if self.isMassBalanced:
         #     info_df = particles.mass_balance_part_info(self, self.dist_angle)
 
-        elif self.isSummedUp:
+        elif self.is_summed_up:
             info_df = self.refitparticledata_df
 
         else:
             info_df = self.particledata_df
 
         if ['amu/ion'] == self.species_a:
-            print('Not supported for \'amu/ion\'')
+            print('Not supported if \'return_amu_ion = True\'')
             sys.exit()
 
         e_max = 100
@@ -915,7 +915,7 @@ class Particles:
                 amu = np.vectorize(self.amu_dic.get)(species)  # amu of species
                 escape_e = (amu * v_esc ** 2) * 0.5 / 6.022e+26 * 6.242e+18  # calc escape energy in eV
 
-            if self.isSummedUp:
+            if self.is_summed_up:
                 parameters = info_df[species][0].loc[self.dist_angle]
                 if self.isDebug:
                     print(species)
@@ -1081,7 +1081,7 @@ class Particles:
         loss_text = ['Loss fraction']
         quant_dist = pd.DataFrame(columns=self.species_a)
         for ss, species in enumerate(species_l):
-            if self.isSummedUp:
+            if self.is_summed_up:
                 quant_dist_i = dist_df[species][0].apply(
                     lambda x: x * ion_flux * self.yield_df[species].loc[self.dist_angle])
             else:
@@ -1090,7 +1090,7 @@ class Particles:
 
             quant_dist[species] = quant_dist_i
 
-            if self.isSummedUp:
+            if self.is_summed_up:
                 peak_value = peak(quant_dist_i.index.values, quant_dist_i.iloc[:, 0])[0]  # get global maxima
 
                 if dist == 'energy':
@@ -1112,7 +1112,7 @@ class Particles:
                 #     lossfrac = self.edist_loss_df.iloc[0][species].values.tolist()[0][0]
                 #     loss_text.append(f'{species}: {lossfrac:.2%}')
 
-        if self.isSummedUp:
+        if self.is_summed_up:
 
             sns.lineplot(ax=ax_dist,
                          data=quant_dist,
@@ -1177,7 +1177,7 @@ class Particles:
             ax_dist.xaxis.set_major_locator(plt.MaxNLocator(4))
 
             # Adjust edist Legend
-            if self.isSummedUp:
+            if self.is_summed_up:
                 handles, _ = ax_dist.get_legend_handles_labels()  # labels are pre-defined
             else:
                 handles, labels = ax_dist.get_legend_handles_labels()
@@ -1221,7 +1221,7 @@ class Particles:
             """
             Adjust adist Legend
             """
-            if self.isSummedUp:  # or self.isMassBalanced #deprecated
+            if self.is_summed_up:  # or self.isMassBalanced #deprecated
                 handles, _ = ax_dist.get_legend_handles_labels()  # labels are pre-defined
             else:
                 handles, labels = ax_dist.get_legend_handles_labels()  # labels are pre-defined
@@ -1229,7 +1229,7 @@ class Particles:
 
             yanchor = 0.00
             nrows = 3
-            if self.isSummedUp:
+            if self.is_summed_up:
                 yanchor = 0.21
                 nrows = 2
 
@@ -1248,7 +1248,7 @@ class Particles:
                    '_' + \
                    '_'.join(species_l)
         filename = safe_title_trans(filename)
-        if self.isSummedUp:
+        if self.is_summed_up:
             summedsfx = '_sm'
         else:
             summedsfx = ''
@@ -1323,9 +1323,10 @@ class Particles:
         """
         handles, labels = ax.get_legend_handles_labels()
         if self.return_amu_ion:
-            model_label = self.sfx_for_plot(drop_prefix=False)
-            rho_sys = self.rho_system_df.sum()
-            labels[0] = f'{model_label},\nrho = {rho_sys:0.2f}' + ' g cm$^{-3}$'
+            modat_label = self.sfx_for_plot(drop_prefix=False)
+            if self.rho_system_df:
+                rho_sys = self.rho_system_df.sum()
+                labels[0] = f'{modat_label},\nrho = {rho_sys:0.2f}' + ' g cm$^{-3}$'
 
         ax.legend(handles,
                   labels,
@@ -1345,7 +1346,7 @@ class Particles:
 
         return fig, ax
 
-    def cipw_norm(self, comp_l, comp_frac_l, verboseCIPW=False):
+    def cipw_norm(self, at_l, at_frac_l, verboseCIPW=False):
         if self.isDebug:
             verboseCIPW = True
 
@@ -1356,7 +1357,7 @@ class Particles:
         minfrac_mol = pd.DataFrame(data=np.zeros(len(mineral_names)), columns=['frac'],
                                index=mineral_names).T
 
-        comp_df = pd.DataFrame(data=comp_frac_l, columns=['at%'], index=comp_l)
+        comp_df = pd.DataFrame(data=at_frac_l, columns=['at%'], index=at_l)
 
         species_dict_dir = os.path.join(self.tabledir,'species_dict.txt')
         species_df = pd.read_csv(species_dict_dir, header=0, delim_whitespace=True)
@@ -1370,7 +1371,7 @@ class Particles:
         """
         CIPW_elements = False
         element_l = ['O', 'Si', 'Ca', 'Mg']  # elements that should be passed as oxides
-        el_test = [i for i in element_l if i in comp_l]
+        el_test = [i for i in element_l if i in at_l]
         if len(el_test) > 0:
             CIPW_elements = True
             CIPW_oxides = not CIPW_elements
