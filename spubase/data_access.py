@@ -7,8 +7,9 @@ import os
 import re
 import sys
 import math
+import time
 import warnings
-
+import itertools
 import pandas
 
 import pylab
@@ -19,8 +20,12 @@ import matplotlib.pyplot as plt
 import scipy.integrate as integrate
 from scipy.optimize import curve_fit
 from scipy.optimize import OptimizeWarning
+from scipy.optimize import differential_evolution
+from scipy.optimize import dual_annealing
 from matplotlib.ticker import FuncFormatter
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+
+from .src.fit3d import lobeFunction, costfunction, plot3D
 
 # import argparse
 from pandas import DataFrame
@@ -121,15 +126,15 @@ def cosfit(angle, cos_k, cos_tilt, cos_m, cos_n):
     return nr_part
 
 
-def fit_eq(xdata, ydata, eq, binary_e=1e5):
+def fit_eq(df, eq, binary_e=1e5, init_guess=None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         fxn()
         # mask all values that are too close to the origin (makes it nigh impossible to fit)
         if eq == cosfit:
-            maskforfit = [-1.4 < x < 0.8 for x in xdata]
-            xdata = xdata[maskforfit]
-            ydata = ydata[maskforfit]
+            maskforfit = [-1.4 < x < 0.8 for x in df.iloc[:, 0]]
+            xdata = df[maskforfit].iloc[:, 0]
+            ydata = df[maskforfit].iloc[:, 1]
             popt, pcov = curve_fit(f=eq,
                                    xdata=xdata,
                                    ydata=ydata,
@@ -143,19 +148,22 @@ def fit_eq(xdata, ydata, eq, binary_e=1e5):
             """
             Determine normalization factor
             """
-            phi_tilt = popt[1]
-            phi_m = popt[2]
-            phi_n = popt[3]
+            theta_tilt = popt[1]
+            theta_m = popt[2]
+            theta_n = popt[3]
             k_leq, k_leq_error = integrate.quad(
-                lambda x: np.power(np.cos((-abs(phi_tilt) - x) / (1 - 2 / np.pi * -abs(phi_tilt))), phi_m),
-                -np.pi / 2, -abs(phi_tilt))
+                lambda x: np.power(np.cos((-abs(theta_tilt) - x) / (1 - 2 / np.pi * -abs(theta_tilt))), theta_m),
+                -np.pi / 2, -abs(theta_tilt))
 
             k_geq, k_geq_error = integrate.quad(
-                lambda x: np.power(np.cos((x - phi_tilt) / (1 - 2 / np.pi * phi_tilt)), phi_n), phi_tilt,
+                lambda x: np.power(np.cos((x - theta_tilt) / (1 - 2 / np.pi * theta_tilt)), theta_n), theta_tilt,
                 np.pi / 2)
             popt[0] = k_leq + k_geq
+            return popt, pcov
 
         elif eq == thompson:
+            xdata = df.iloc[:, 0].to_numpy()
+            ydata = df.iloc[:, 1].to_numpy()
             popt, pcov = curve_fit(eq, xdata, ydata, p0=[0.5,
                                                          xdata[np.where(ydata == ydata.max())][0],
                                                          binary_e],
@@ -168,7 +176,53 @@ def fit_eq(xdata, ydata, eq, binary_e=1e5):
                                         binary_e)
 
             popt = popt[:2]  # drop binary_e again
-        return popt, pcov
+            return popt, pcov
+        elif eq == lobeFunction:
+            diffeval_start = time.time()
+            bounds = [(0, np.pi / 2), (0.0, np.pi/4), (1, 5), (1, 5)]
+            if init_guess is None:
+                result = dual_annealing(costfunction, bounds,
+                                        #tol=0.01,
+                                        #recombination=0.7,
+                                        args=(df,))
+            else:
+                result = dual_annealing(costfunction, bounds,
+                                        #tol=0.01,
+                                        #recombination=0.7,
+                                        x0=init_guess,
+                                        args=(df,))
+            solution = result['x']
+            print('Status : %s' % result['message'])
+            print('Solution : %s' % result['x'])
+            print('Total Evaluations: %d' % result['nfev'])
+            diffeval_end = time.time()
+            print(f'Minimized in {diffeval_end - diffeval_start:.2f} seconds')
+
+            #############################################
+
+            diffeval_start = time.time()
+            bounds = [(0, np.pi / 2), (0.0, np.pi/4), (1, 5), (1, 5)]
+            if init_guess is None:
+                result = differential_evolution(costfunction, bounds,
+                                                #tol=0.01,
+                                                #recombination=0.7,
+                                                args=(df,))
+            else:
+                result = differential_evolution(costfunction, bounds,
+                                                #tol=0.01,
+                                                #recombination=0.7,
+                                                x0=init_guess,
+                                                args=(df,))
+            solution = result['x']
+            print('Status : %s' % result['message'])
+            print('Solution : %s' % result['x'])
+            print('Total Evaluations: %d' % result['nfev'])
+            diffeval_end = time.time()
+            print(f'Minimized in {diffeval_end - diffeval_start:.2f} seconds')
+
+
+            return solution
+
 
 def normalize_df(df):
     df.dropna(inplace=True, axis=1)
@@ -244,7 +298,8 @@ class Particles:
         self.dist_angle = 45  # default incident angle for outputs is 45°
 
         self.angles_a = list(np.linspace(0.0, 88.0, num=89))
-        self.params = ['phi_k', 'phi_tilt', 'phi_m', 'phi_n', 'energy_k', 'energy_e']
+        self.params = ['theta_k', 'theta_tilt', 'theta_m', 'theta_n',
+                       'plume_k', 'plume_tilt', 'plume_m', 'plume_n','energy_k', 'energy_e']
 
         # dictionaries and table data
         self.mindict_df_atoms = pd.read_csv(os.path.join(self.tabledir,'minerals_atoms.txt'), header=0, index_col=0)
@@ -451,7 +506,7 @@ class Particles:
             missing_minerals = list(set(mineral_all).intersection(self.min_not_included))
             print(f'Minerals not in SpuBase: {missing_minerals}')
 
-
+    
     def eckstein_fit_data(self):
 
         if 'SW' in self.impactor:
@@ -546,9 +601,8 @@ class Particles:
 
         mindict_df_atoms = self.mindict_df_atoms.loc[:, self.mindict_df_atoms.columns != 'total']
 
-        dist_fit_params = ['phi_k', 'phi_tilt', 'phi_m', 'phi_n', 'energy_k', 'energy_e']
         mineral_suffix = self.mineral_a
-        dist_fit_params = [param + '_' + sfx for sfx in mineral_suffix for param in dist_fit_params]
+        dist_fit_params = [param + '_' + sfx for sfx in mineral_suffix for param in self.params]
         dist_fit_header = np.concatenate([['alpha'], dist_fit_params])
 
         yield_df = pd.DataFrame(data=self.angles_a, columns=['alpha'])
@@ -583,16 +637,16 @@ class Particles:
                 if self.return_amu_ion:
                     species_is_in_mineral = True
 
-                iyield, iadist, iedist = Particles.particle_data_impactor_refit(self,
-                                                                                species,
-                                                                                data_dfdf[mineral][0],
-                                                                                species_is_in_mineral,
-                                                                                eckstein_dfdf[mineral][0],
-                                                                                self.minfrac_a[ff])
+                iyield, iadist, iplume, iedist = Particles.particle_data_impactor_refit(self,
+                                                                                        species,
+                                                                                        data_dfdf[mineral][0],
+                                                                                        species_is_in_mineral,
+                                                                                        eckstein_dfdf[mineral][0],
+                                                                                        self.minfrac_a[ff])
 
                 element_yield[self.mineral_a[ff]] = iyield  # set element yield for mineral
                 collect_yield = np.add(collect_yield, iyield)
-                particle_info = np.c_[particle_info, iadist, iedist]  # adds up along second axis
+                particle_info = np.c_[particle_info, iadist, iplume, iedist]  # adds up along second axis
 
             iparticledata_df = pd.DataFrame(particle_info, columns=dist_fit_header)
             yield_df[species] = collect_yield
@@ -616,6 +670,7 @@ class Particles:
         iyield = []
         iadist = []
         iedist = []
+        iplume = []
 
         if not self.sw_comparison:  # todo: remove this check and the content of the 'else'
 
@@ -640,16 +695,24 @@ class Particles:
                 sw_comp = [1]
 
         nr_datapoints = 500
-        phi_a = np.linspace(-np.pi, np.pi, num=nr_datapoints)
+        nr_xyz_points = 20
+        theta_a = np.linspace(-np.pi/2, np.pi/2, num=nr_datapoints)
         energy_a = np.linspace(0, 500, num=nr_datapoints)
+
+        theta_3d = np.linspace(0, np.pi/2, int(nr_xyz_points))  # polar angle
+        phi_3d = np.linspace(-np.pi, np.pi, int(nr_xyz_points))
+        plume_mesh = list(itertools.product(theta_3d, phi_3d))
+        plume_df = pd.DataFrame(data=plume_mesh, columns=['theta', 'phi'])
 
         for aa, angle in enumerate(self.angles_a):
 
             iyield_mb = 0
             iadist_params = [0, 0, 0, 0]
+            iplume_params = [0, 0, 0, 0]
             iedist_params = [0, 0]
 
-            a_isumpart = np.zeros(len(phi_a))
+            a_isumpart = np.zeros(len(theta_a))
+            p_isumpart = np.zeros(len(plume_mesh))
             e_isumpart = np.zeros(len(energy_a))
             for ii, impactor in enumerate(impactors_a):
                 if species_is_in_mineral:
@@ -658,36 +721,51 @@ class Particles:
                     iyield_mb += sw_comp[ii] * eckstein(angle, *eckparam[species])
                     if not self.return_amu_ion:
                         data = data_df[impactor][0]
-                        phi_k = data[f'phiK_{species}'].loc[angle]
-                        phi_tilt = data[f'phiTilt_{species}'].loc[angle]
-                        phi_m = data[f'phiM_{species}'].loc[angle]
-                        phi_n = data[f'phiN_{species}'].loc[angle]
+                        theta_k = data[f'thetaK_{species}'].loc[angle]
+                        theta_tilt = data[f'thetaTilt_{species}'].loc[angle]
+                        theta_m = data[f'thetaM_{species}'].loc[angle]
+                        theta_n = data[f'thetaN_{species}'].loc[angle]
+                        plume_k = data[f'3dK_{species}'].loc[angle]
+                        plume_tilt = data[f'3dTilt_{species}'].loc[angle]
+                        plume_m = data[f'3dM_{species}'].loc[angle]
+                        plume_n = data[f'3dN_{species}'].loc[angle]
                         energy_k = data[f'energyK_{species}'].loc[angle]
                         energy_e = data[f'energyE_{species}'].loc[angle]
-                        adist_params = [phi_k, phi_tilt, phi_m, phi_n]
-                        edist_params = [energy_k, energy_e]
+
+                        iadist_params = [theta_k, theta_tilt, theta_m, theta_n]
+                        iplume_params = [plume_k, plume_tilt, plume_m, plume_n]
+                        iedist_params = [energy_k, energy_e]
 
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore")
                             fxn()
                             binary_e = self.get_binary_e(species, impactor)
-                            adist_particles = np.array(cosfit(phi_a, *adist_params)) * sw_comp[ii]
-                            edist_particles = np.array(thompson(energy_a, *edist_params, binary_e)) * sw_comp[ii]
-
+                            adist_particles = np.array(cosfit(theta_a, *iadist_params)) * sw_comp[ii]
+                            pdist_particles = lobeFunction(iplume_params, plume_df)['rho'] * sw_comp[ii]
+                            edist_particles = np.array(thompson(energy_a, *iedist_params, binary_e)) * sw_comp[ii]
                         a_isumpart = np.add(a_isumpart, np.nan_to_num(adist_particles, copy=False))
+                        p_isumpart = np.add(p_isumpart, np.nan_to_num(pdist_particles, copy=False))
                         e_isumpart = np.add(e_isumpart, np.nan_to_num(edist_particles, copy=False))
 
-            if species_is_in_mineral and not self.return_amu_ion:
-                iadist_params, a_pcov = fit_eq(phi_a, a_isumpart, eq=cosfit)
-                iedist_params, e_pcov = fit_eq(energy_a, e_isumpart, eq=thompson, binary_e=binary_e)
+            if len(impactors_a) > 1 and species_is_in_mineral and not self.return_amu_ion:
+                theta_df = pd.DataFrame([theta_a, a_isumpart]).T
+                energy_df = pd.DataFrame([energy_a, e_isumpart]).T
+                plume_df['rho'] = p_isumpart
+                init_guess = iplume_params
+                init_guess[0] = plume_df['rho'].max()
+
+                iadist_params, a_pcov = fit_eq(theta_df, eq=cosfit)
+                iedist_params, e_pcov = fit_eq(energy_df, eq=thompson, binary_e=binary_e)
+                iplume_params = fit_eq(plume_df, eq=lobeFunction, init_guess=init_guess)
 
             iyield.append(iyield_mb)
             iadist.append(iadist_params)
             iedist.append(iedist_params)
+            iplume.append(iplume_params)
 
         iyield = iminfrac * np.array(iyield)  # multiply calculated yields with mineral fraction
 
-        return iyield, iadist, iedist
+        return iyield, iadist, iplume, iedist
 
     def particle_data_refit(self):
         # For each impact angle
@@ -699,8 +777,15 @@ class Particles:
         # and fit parameter dataframes on the second layer
 
         nr_datapoints = 500
-        phi_a = np.linspace(-np.pi, np.pi, num=nr_datapoints)
+        nr_xyz_points = 20
+        theta_a = np.linspace(-np.pi/2, np.pi/2, num=nr_datapoints)
         energy_a = np.linspace(0, 500, num=nr_datapoints)
+
+        theta_3d = np.linspace(0, np.pi/2, int(nr_xyz_points))  # polar angle
+        phi_3d = np.linspace(-np.pi, np.pi, int(nr_xyz_points))
+        plume_mesh = list(itertools.product(theta_3d, phi_3d))
+        plume_df = pd.DataFrame(data=plume_mesh, columns=['theta', 'phi'])
+
         self.refitparticledata_df = pd.DataFrame(columns=self.species_a)
         print("\nSum up particles from minerals and perform a re-fit\n"
               "Process:")
@@ -716,29 +801,39 @@ class Particles:
                 fitparam_df.set_index('alpha', inplace=True)
 
             for aa, angle in enumerate(self.angles_a):
-
-                a_isumpart = np.zeros(len(phi_a))
+                print(f'{100 / len(self.angles_a) * (aa + 1):0.1f}%')
+                a_isumpart = np.zeros(len(theta_a))
                 e_isumpart = np.zeros(len(energy_a))
+                p_isumpart = np.zeros(len(plume_mesh))
                 for mm, mineral in enumerate(self.mineral_a):
                     param_minsfx = [param + f'_{mineral}' for param in self.params]
                     fitparams = fitparam_df[param_minsfx]  # all fit parameters of the given mineral
-                    adist_params = fitparams[param_minsfx[0:4]].iloc[int(aa)]
-                    edist_params = fitparams[param_minsfx[4:]].iloc[int(aa)]
-
+                    iadist_params = fitparams[param_minsfx[0:4]].iloc[int(aa)]
+                    iplume_params = fitparams[param_minsfx[4:8]].iloc[int(aa)]
+                    iedist_params = fitparams[param_minsfx[8:]].iloc[int(aa)]
                     binary_e = self.get_binary_e(species)
                     with warnings.catch_warnings():
                         warnings.simplefilter("ignore")
                         fxn()
                         mineral_element_yield = self.yield_system_dfdf[species][0][mineral].iloc[aa]
-                        adist_particles = np.array(cosfit(phi_a, *adist_params)) * mineral_element_yield
-                        edist_particles = np.array(thompson(energy_a, *edist_params, binary_e)) * mineral_element_yield
+                        adist_particles = np.array(cosfit(theta_a, *iadist_params)) * mineral_element_yield
+                        pdist_particles = lobeFunction(iplume_params, plume_df)['rho'] * mineral_element_yield
+                        edist_particles = np.array(thompson(energy_a, *iedist_params, binary_e)) * mineral_element_yield
                     a_isumpart = np.add(a_isumpart, np.nan_to_num(adist_particles, copy=False))
                     e_isumpart = np.add(e_isumpart, np.nan_to_num(edist_particles, copy=False))
+                    p_isumpart = np.add(p_isumpart, np.nan_to_num(pdist_particles, copy=False))
 
-                a_popt, a_pcov = fit_eq(phi_a, a_isumpart, eq=cosfit)  # angle fit
-                e_popt, e_pcov = fit_eq(energy_a, e_isumpart, eq=thompson, binary_e=binary_e)  # energy fit
 
-                isummed.loc[angle] = np.append(a_popt, e_popt)
+                if len(self.mineral_a) > 1:
+                    theta_df = pd.DataFrame([theta_a, a_isumpart]).T
+                    energy_df = pd.DataFrame([energy_a, e_isumpart]).T
+                    plume_df['rho'] = p_isumpart
+                    init_guess = iplume_params
+                    init_guess.iloc[0] = plume_df['rho'].max()
+                    iadist_params, a_pcov = fit_eq(theta_df, eq=cosfit)  # angle fit
+                    iedist_params, e_pcov = fit_eq(energy_df, eq=thompson, binary_e=binary_e)  # energy fit
+                    iplume_params = fit_eq(plume_df, eq=lobeFunction, init_guess=init_guess)
+                isummed.loc[int(angle)] = np.concatenate((iadist_params, iedist_params, iplume_params), axis=None)
 
                 if self.isDebug:
                     """
@@ -749,7 +844,7 @@ class Particles:
                         fig_adist_azimuth = plt.figure(dpi=300, figsize=(2*4, 1*4))
                         ax_adist = fig_adist_azimuth.add_subplot(1, 2, 1, projection="polar")
                         ## data:
-                        plot_yield_df = pd.DataFrame(index=phi_a,
+                        plot_yield_df = pd.DataFrame(index=theta_a,
                                                     data=a_isumpart,
                                                     columns=['amu/ion'])
                         plot_yield_df = plot_yield_df/plot_yield_df.max()
@@ -763,7 +858,7 @@ class Particles:
                                                            data=(self.cosfit(np.linspace(np.pi / 2,
                                                                                   -np.pi / 2,
                                                                                   50),
-                                                                      *a_popt)),
+                                                                      *iadist_params)),
                                                            columns=[species])
                         plot_yieldFit_df = plot_yieldFit_df/plot_yieldFit_df.max()
                         sns.lineplot(ax=ax_adist,
@@ -853,10 +948,10 @@ class Particles:
                 if param == '':
                     print(f' %%%%%%%%%%%%%%%% {species}  %%%%%%%%%%%%%%%%')
                     print(df_of_interest)
-                elif param in ('phi_', 'energy_e'):
+                elif param in ('theta_', 'energy_e'):
                     data_of_interest = df_of_interest[df_of_interest.index.str.contains(param)]
                     print(f'\n%%%%%%%%%%%%%%% {species} @ {angle}° %%%%%%%%%%%%%%%%\n')
-                    if param == 'phi_tilt':
+                    if param == 'theta_tilt':
                         print(f'Peak of sputtered {species} angular distribution'
                               '(angle/° relative to surface normal, away from impinging ion)\n')
                         print(abs(data_of_interest / np.pi * 180))
@@ -898,8 +993,8 @@ class Particles:
             energy_a = np.linspace(0.1, e_max,
                                    num=nr_datapoints)  # if no energy range is defined, 0.1 -> 100 eV is used
             energy_bin = e_max / nr_datapoints
-        phi_a = np.linspace(-np.pi, np.pi, num=nr_datapoints)  # full angular distribution is always necessary
-        phi_bin = 2 * np.pi / nr_datapoints
+        theta_a = np.linspace(-np.pi/2, np.pi/2, num=nr_datapoints)  # full angular distribution is always necessary
+        theta_bin = 2 * np.pi / nr_datapoints
 
         edist_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
         edist_loss_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
@@ -913,7 +1008,7 @@ class Particles:
         for ss, species in enumerate(self.species_a):
             iout_df_energy: DataFrame = pd.DataFrame(data=energy_a, columns=['energy'])
             iout_df_energy_loss: DataFrame = pd.DataFrame(columns=[species], index=['loss'])
-            iout_df_angle: DataFrame = pd.DataFrame(data=phi_a, columns=['alpha'])
+            iout_df_angle: DataFrame = pd.DataFrame(data=theta_a, columns=['alpha'])
 
             binary_e = self.get_binary_e(
                 species)  # maximum energy that can be transferred from impactor to species in BC
@@ -928,13 +1023,13 @@ class Particles:
                 if self.isDebug:
                     print(species)
                     print(*parameters)
-                phi_k, phi_tilt, phi_m, phi_n, energy_k, energy_e = parameters.values.tolist()
+                theta_k, theta_tilt, theta_m, theta_n, energy_k, energy_e = parameters.values.tolist()
 
-                iout_df_angle[species] = iout_df_angle['alpha'].apply(lambda x: phi_bin * cosfit(x,
-                                                                                                 phi_k,
-                                                                                                 phi_tilt,
-                                                                                                 phi_m,
-                                                                                                 phi_n))
+                iout_df_angle[species] = iout_df_angle['alpha'].apply(lambda x: theta_bin * cosfit(x,
+                                                                                                 theta_k,
+                                                                                                 theta_tilt,
+                                                                                                 theta_m,
+                                                                                                 theta_n))
 
                 iout_df_energy[species] = iout_df_energy['energy'].apply(lambda x: energy_bin * thompson(x,
                                                                                                          energy_k,
@@ -949,20 +1044,20 @@ class Particles:
                     iout_df_energy_loss[species] = 'n.d'
 
                 if self.isDebug:
-                    k_phi_leq, k_phi_leq_error = integrate.quad(
-                        lambda x: 1 / phi_k * np.power(np.cos((-abs(phi_tilt) - x) / (1 - 2 / np.pi * -abs(phi_tilt))),
-                                                       phi_m),
+                    k_theta_leq, k_theta_leq_error = integrate.quad(
+                        lambda x: 1 / theta_k * np.power(np.cos((-abs(theta_tilt) - x) / (1 - 2 / np.pi * -abs(theta_tilt))),
+                                                       theta_m),
                         -np.pi / 2,
-                        -abs(phi_tilt))
+                        -abs(theta_tilt))
 
-                    k_phi_geq, k_phi_geq_error = integrate.quad(
-                        lambda x: 1 / phi_k * np.power(np.cos((x - phi_tilt) / (1 - 2 / np.pi * phi_tilt)), phi_n),
-                        phi_tilt,
+                    k_theta_geq, k_theta_geq_error = integrate.quad(
+                        lambda x: 1 / theta_k * np.power(np.cos((x - theta_tilt) / (1 - 2 / np.pi * theta_tilt)), theta_n),
+                        theta_tilt,
                         np.pi / 2)
 
-                    k_angle = k_phi_leq + k_phi_geq
+                    k_angle = k_theta_leq + k_theta_geq
                     k_energy, _ = integrate.quad(thompson, 0, binary_e, args=(energy_k, energy_e, binary_e))
-                    # k_adist, k_adist_error = integrate.quad(lambda x: self.cosfit(x, phi_k, phi_tilt, phi_m, phi_n))
+                    # k_adist, k_adist_error = integrate.quad(lambda x: self.cosfit(x, theta_k, theta_tilt, theta_m, theta_n))
                     # k_edist, k_edist_error = integrate.quad(lambda x: self.thompson(x, energy_k, energy_e, binary_e))
                     print(k_angle)
                     print(k_energy)
@@ -971,11 +1066,11 @@ class Particles:
                 parameters = info_df[species][0].loc[self.dist_angle]
                 for mineral in self.mineral_a:
 
-                    phi_k, phi_tilt, phi_m, phi_n, energy_k, energy_e = \
+                    theta_k, theta_tilt, theta_m, theta_n, energy_k, energy_e = \
                         parameters[parameters.index.str.contains(f'{mineral}(?!.)', regex=True)]
 
                     iout_df_angle[species + '_' + mineral] = \
-                        iout_df_angle['alpha'].apply(lambda x: phi_bin * cosfit(x, phi_k, phi_tilt, phi_m, phi_n))
+                        iout_df_angle['alpha'].apply(lambda x: theta_bin * cosfit(x, theta_k, theta_tilt, theta_m, theta_n))
 
                     iout_df_energy[species + '_' + mineral] = \
                         iout_df_energy['energy'].apply(lambda x: energy_bin * thompson(x, energy_k,
@@ -989,7 +1084,7 @@ class Particles:
 
                     if self.isDebug:
                         print(mineral)
-                        print(phi_k)
+                        print(theta_k)
                         print(energy_k)
                         print(f"Integrated angular distribution:"
                               f"{sum(iout_df_angle[species + '_' + mineral].fillna(0))} (before flux)")
@@ -1110,7 +1205,7 @@ class Particles:
                 else:
                     """ adds peak ANGLE value to label"""
                     peak_value = rad2deg(peak_value)
-                    peak_label = r'$\phi_{{{}}}$'.format(species) + \
+                    peak_label = r'$\theta_{{{}}}$'.format(species) + \
                                  f' = {peak_value:2.1f}'.format(species) + r'$^\circ$'
 
                 labels.append(f'{peak_label.rjust(2)}')
