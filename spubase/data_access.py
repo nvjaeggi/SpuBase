@@ -19,6 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.integrate as integrate
 from scipy.optimize import curve_fit
+from scipy.optimize import minimize
 from scipy.optimize import OptimizeWarning
 from scipy.optimize import differential_evolution
 from scipy.optimize import dual_annealing
@@ -181,44 +182,53 @@ def fit_eq(df, eq, binary_e=1e5, init_guess=None):
             diffeval_start = time.time()
             bounds = [(0, np.pi / 2), (0.0, np.pi/4), (1, 5), (1, 5)]
             if init_guess is None:
-                result = dual_annealing(costfunction, bounds,
-                                        #tol=0.01,
-                                        #recombination=0.7,
-                                        args=(df,))
+                result = minimize(costfunction,
+                                  bounds=bounds,
+                                  method='L-BFGS-B',
+                                  args=(df,))
+                # result = dual_annealing(costfunction, bounds,
+                #                         #tol=0.01,
+                #                         #recombination=0.7,
+                #                         args=(df,))
             else:
-                result = dual_annealing(costfunction, bounds,
-                                        #tol=0.01,
-                                        #recombination=0.7,
-                                        x0=init_guess,
-                                        args=(df,))
+                # result = dual_annealing(costfunction, bounds,
+                #                         #tol=0.01,
+                #                         #recombination=0.7,
+                #                         x0=init_guess,
+                #                         args=(df,))
+                result = minimize(costfunction,
+                                  bounds=bounds,
+                                  method='L-BFGS-B',
+                                  x0=init_guess,
+                                  args=(df,))
             solution = result['x']
-            print('Status : %s' % result['message'])
-            print('Solution : %s' % result['x'])
-            print('Total Evaluations: %d' % result['nfev'])
-            diffeval_end = time.time()
-            print(f'Minimized in {diffeval_end - diffeval_start:.2f} seconds')
+            # print('Status : %s' % result['message'])
+            # print('Solution : %s' % result['x'])
+            # print('Total Evaluations: %d' % result['nfev'])
+            # diffeval_end = time.time()
+            # print(f'Minimized in {diffeval_end - diffeval_start:.2f} seconds')
 
             #############################################
-
-            diffeval_start = time.time()
-            bounds = [(0, np.pi / 2), (0.0, np.pi/4), (1, 5), (1, 5)]
-            if init_guess is None:
-                result = differential_evolution(costfunction, bounds,
-                                                #tol=0.01,
-                                                #recombination=0.7,
-                                                args=(df,))
-            else:
-                result = differential_evolution(costfunction, bounds,
-                                                #tol=0.01,
-                                                #recombination=0.7,
-                                                x0=init_guess,
-                                                args=(df,))
-            solution = result['x']
-            print('Status : %s' % result['message'])
-            print('Solution : %s' % result['x'])
-            print('Total Evaluations: %d' % result['nfev'])
-            diffeval_end = time.time()
-            print(f'Minimized in {diffeval_end - diffeval_start:.2f} seconds')
+            #
+            # diffeval_start = time.time()
+            # bounds = [(0, np.pi / 2), (0.0, np.pi/4), (1, 5), (1, 5)]
+            # if init_guess is None:
+            #     result = differential_evolution(costfunction, bounds,
+            #                                     #tol=0.01,
+            #                                     #recombination=0.7,
+            #                                     args=(df,))
+            # else:
+            #     result = differential_evolution(costfunction, bounds,
+            #                                     #tol=0.01,
+            #                                     #recombination=0.7,
+            #                                     x0=init_guess,
+            #                                     args=(df,))
+            # solution = result['x']
+            # print('Status : %s' % result['message'])
+            # print('Solution : %s' % result['x'])
+            # print('Total Evaluations: %d' % result['nfev'])
+            # diffeval_end = time.time()
+            # print(f'Minimized in {diffeval_end - diffeval_start:.2f} seconds')
 
 
             return solution
