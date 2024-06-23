@@ -56,8 +56,9 @@ fig_adist
 #%%
 fig_edist, ax_edist = SpuBase.plot_dist('energy', title='')
 fig_edist
-#%% md
-
+#%%
+fig_plume, ax_plume = SpuBase.plot_dist('plume', title='')
+fig_plume
 #%%
 
 #%%

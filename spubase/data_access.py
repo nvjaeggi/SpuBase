@@ -763,7 +763,7 @@ class Particles:
 
         return iyield, iadist, iplume, iedist
 
-    def particle_data_refit(self, reimport=True):
+    def particle_data_refit(self, reimport=False):
         # For each impact angle
         # Create data points for each element with mineral-specific fit parameters
         # Scale the data points with the mineral-specific element yield
@@ -785,7 +785,8 @@ class Particles:
 
                 self.refitparticledata_df[species] = [single_file_df[species_params[1:]]]
                 self.refitparticledata_df[species][0].columns = self.params
-                self.refitparticledata_df[species][0].index = self.angles_a
+                if len(self.refitparticledata_df[species][0].index) < 80:
+                    self.refitparticledata_df[species][0].index = self.angles_a
 
             return
 
@@ -1248,9 +1249,9 @@ class Particles:
             x = x * 1e5
             return int(round(x, 0))
 
-        def logscale(x, pos=None):
-            x = np.log10(x)
-            return int(round(x, 0))
+        # def logscale(x, pos=None):
+        #     x = np.log10(x)
+        #     return int(round(x, 0))
 
         yFormat = FuncFormatter(times1e5)
 
@@ -1273,6 +1274,7 @@ class Particles:
         if dist == 'energy':
             ax_dist = fig_dist.add_subplot(1, 1, 1)
             dist_df = self.edist_df
+            print(dist_df)
             # if title == '':
             #     title = f'Energy distribution'
             if ion_flux != 1:
@@ -1282,6 +1284,7 @@ class Particles:
 
         elif dist == 'angular':
             dist_df = self.adist_df
+            print(dist_df)
             ax_dist = fig_dist.add_subplot(1, 1, 1, projection="polar")
             x_cut = 0.08
             y_cut = -0.33
@@ -1294,6 +1297,16 @@ class Particles:
             ax_dist.set_xlabel('at/ion')
             ax_dist.set_thetamax(-90)
             ax_dist.set_theta_zero_location("N")
+
+        elif dist == 'plume':
+            colors = ['red', 'black']
+            alpha = [0.6, 0.5]
+            cmaps = ['gray', 'jet']
+            msize = [1, 0.5]
+            dist_df = self.plume_df
+            print(dist_df)
+            ax_dist = fig_dist.add_subplot(121, projection='3d')
+            ax_dist_xyz = fig_dist.add_subplot(122, projection='3d')
 
         else:
             print('Pass either \'energy\' or \'angular\' as distribution (dist) type.')
@@ -1326,11 +1339,14 @@ class Particles:
                                  f' = {peak_value:2.1f}'.format(species) + ' eV'
                     """Add escape velocity lines and loss fractions"""
 
-                else:
+                elif dist == 'angular':
                     """ adds peak ANGLE value to label"""
                     peak_value = rad2deg(peak_value)
                     peak_label = r'$\theta_{{{}}}$'.format(species) + \
                                  f' = {peak_value:2.1f}'.format(species) + r'$^\circ$'
+
+                else:
+                    peak_label = ''
 
                 labels.append(f'{peak_label.rjust(2)}')
 
@@ -1341,11 +1357,36 @@ class Particles:
 
         if self.is_summed_up:
 
-            sns.lineplot(ax=ax_dist,
-                         data=quant_dist,
-                         palette=dict(self.plotting_key['color']),
-                         dashes=True,  # dict(self.plotting_key['line']),
-                         alpha=1.0)
+            if dist == 'plume':
+                quant_dist = quant_dist.reset_index(names=['phi', 'theta'])
+
+                sin_theta = np.sin(quant_dist.theta)
+                cos_theta = np.cos(quant_dist.theta)
+                sin_phi = np.sin(quant_dist.phi)
+                cos_phi = np.cos(quant_dist.phi)
+
+
+
+                for species in self.species_a:
+                    quant_dist['x'] = sin_theta * cos_phi
+                    quant_dist['y'] = sin_theta * sin_phi
+                    quant_dist['z'] = cos_theta
+                    quant_dist[['x', 'y', 'z']] = quant_dist[['x', 'y', 'z']].mul(quant_dist[species], axis='index')
+                    color = self.plotting_key['color'].loc[species]
+                    # ax_dist.plot_trisurf(quant_dist['theta'], quant_dist['phi'], quant_dist[species], #cmap=plt.get_cmap(cmaps[1]),
+                    #                      linewidth=0, antialiased=False, alpha=0.1)
+                    # ax_dist_xyz.plot_trisurf(quant_dist['x'], quant_dist['y'], quant_dist['z'],
+                    #                          linewidth=0, antialiased=False, alpha=0.1)
+                    ax_dist.scatter(quant_dist['theta'], quant_dist['phi'], quant_dist[species], c=color, s=0.1)
+
+                    ax_dist_xyz.scatter(quant_dist['x'], quant_dist['y'], quant_dist[species], c=color, s=0.01)
+
+            else:
+                sns.lineplot(ax=ax_dist,
+                             data=quant_dist,
+                             palette=dict(self.plotting_key['color']),
+                             dashes=True,  # dict(self.plotting_key['line']),
+                             alpha=1.0)
             if self.plot_inset and dist == 'energy' and not self.logplot:
                 ax_inset = inset_axes(ax_dist, width=1.4, height=1,
                                       bbox_to_anchor=(0.68, 0.22),
@@ -1372,11 +1413,20 @@ class Particles:
             for col in quant_dist.columns:
                 quant_dist[col][0].fillna(quant_dist[col][0].mode(), inplace=True)
                 quant_dist[col][0] = quant_dist[col][0].loc[:, (quant_dist[col][0] != 0).any(axis=0)]
-                sns.lineplot(ax=ax_dist,
-                             data=quant_dist[col][0],
-                             palette=dict(self.plotting_key['color']),
-                             dashes=True,  # dict(self.plotting_key['line']),
-                             alpha=1.0)
+
+                if dist == 'plume':
+                    ax_dist.plot_trisurf(quant_dist[col][0]['theta'], quant_dist[col][0]['phi'], quant_dist[col][0]['rho'],
+                                         cmap=plt.get_cmap(cmaps[1]),
+                                         linewidth=0, antialiased=False, alpha=alpha[1])
+                    ax_dist_xyz.plot_trisurf(quant_dist[col][0]['x'], quant_dist[col][0]['y'], quant_dist[col][0]['z'],
+                                             cmap=plt.get_cmap(cmaps[1]),
+                                             linewidth=0, antialiased=False, alpha=alpha[1])
+                else:
+                    sns.lineplot(ax=ax_dist,
+                                 data=quant_dist[col][0],
+                                 palette=dict(self.plotting_key['color']),
+                                 dashes=True,  # dict(self.plotting_key['line']),
+                                 alpha=1.0)
                 if quant_dist[col][0].max().iloc[0] >= i_ymax and dist == 'energy':
                     i_ymax = quant_dist[col][0].max().max()
 
@@ -1466,6 +1516,17 @@ class Particles:
                            bbox_to_anchor=(0.5, yanchor),
                            ncol=min(max(int(np.ceil(len(handles) / nrows)), 2), 3),
                            frameon=False)
+
+        if dist == 'plume':
+            # Tweak the limits and add latex math labels.
+            ax_dist.set_xlabel(r'$\theta$')
+            ax_dist.set_ylabel(r'$\phi$')
+            ax_dist.set_zlabel(r'$\rho$')
+            ax_dist.view_init(25, 45 - 90)
+            ax_dist_xyz.set_xlabel(r'x')
+            ax_dist_xyz.set_ylabel(r'y')
+            ax_dist_xyz.set_zlabel(r'z')
+            ax_dist_xyz.set_xlim(-0.5, 0.5)
 
         plotname = f'{self.impactor} \u2192 {self.casename}'
         file_plotname = safe_title_trans(plotname)
