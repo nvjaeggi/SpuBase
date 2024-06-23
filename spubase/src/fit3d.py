@@ -10,6 +10,7 @@
 
 import math
 import time
+import sys
 import pandas as pd
 import numpy as np
 from numpy import sin, cos, arccos, array
@@ -43,7 +44,6 @@ def lobeFunction(params, data_df):
 
     for row in output_df[['x', 'y', 'z']].to_numpy():
         q_vector = np.array([row[0], row[1], row[2]])
-
         xp = q_vector.dot(X_prime)
         yp = q_vector.dot(Y_prime)
         zp = q_vector.dot(Z_prime)
