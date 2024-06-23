@@ -845,7 +845,7 @@ class Particles:
                     init_guess = iplume_params
                     init_guess.iloc[0] = plume_df['rho'].max()
                     iadist_params, a_pcov = fit_eq(theta_df, eq=cosfit)  # angle fit
-                    iplume_params = fit_eq(plume_df, eq=lobeFunction, init_guess=init_guess)dropd
+                    iplume_params = fit_eq(plume_df, eq=lobeFunction, init_guess=init_guess)
                     iedist_params, e_pcov = fit_eq(energy_df, eq=thompson, binary_e=binary_e)  # energy fit
 
                 isummed.loc[int(angle)] = np.concatenate((iadist_params, iplume_params, iedist_params), axis=None)
