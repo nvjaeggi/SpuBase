@@ -4,219 +4,32 @@ See the LICENSE file for licensing information.
 """
 
 import os
-import re
 import sys
 import math
-import time
 import warnings
 import itertools
-import pandas
-
-import pylab
 import seaborn as sns
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.integrate as integrate
-from scipy.optimize import curve_fit
-from scipy.optimize import minimize
+
 from scipy.optimize import OptimizeWarning
-from scipy.optimize import differential_evolution
-from scipy.optimize import dual_annealing
-from matplotlib.ticker import FuncFormatter
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-
-from .src.fit3d import lobeFunction, costfunction, plot3D
-
-# import argparse
-from pandas import DataFrame
-
-def invpairdiff(lst):
-    f_lst = lst.astype(float)  # floats are required for "** (-1)" tp work
-    length = len(lst)
-    total = np.ones(length)
-    for i in range(length - 1):
-        # adding the alternate numbers
-        total[i] = (f_lst[i + 1] - f_lst[i]) ** (-1)
-    return total
+from .src._fitting_sb import lobe_function, eckstein, cosfit, fit_eq, thompson, cosfit_integrate
 
 
-def safe_title_trans(problematic_title):
-    table = str.maketrans({'\u2192': '_',
-                           '>': '',
-                           '-': '_',
-                           '+': '_',
-                           '.': None,
-                           '(': '_',
-                           ')': None,
-                           ' ': '',
-                           '/': '_'})
-    safe_title = problematic_title.translate(table)
-    return safe_title
-
-
-def peak(x, y):
-    max_int = np.max(y)
-    center_idx = np.where(y == max_int)[0]
-    return x[center_idx]
-
-
-def rad2deg(x_rad):
-    return x_rad * 180 / np.pi
-
-
-def deg2rad(x_rad):
-    return x_rad / 180 * np.pi
 
 
 def fxn():
     warnings.warn("runtime", RuntimeWarning)
     warnings.warn("optimize", OptimizeWarning)
 
+
 def frho(phi, theta, exp_mn):
-    return np.cos(theta) ** exp_mn[0] * (1 / 2 * (2 + np.cos(phi / 2))) ** exp_mn[1]
+    return ((1.0 + np.cos(2.0 * theta)) / 2.0) ** (
+                np.cos(phi) ** 2.0 * exp_mn[0] + np.sin(phi) ** 2.0 * exp_mn[1])
     # Set the limits of integration
 
-
-def sum_up_same(df, cp_target):
-    summed_yield_df = df.copy(deep=True)
-
-    cp_no_suffix = [s.split('_')[0] for s in cp_target]
-
-    cp_no_suffix = np.unique(cp_no_suffix)
-
-    for element in np.unique(cp_no_suffix):
-        summed_yield_df[element] = summed_yield_df[[col for col in summed_yield_df.columns
-                                                    if col.startswith(element)]].sum(axis=1)
-
-    cp_sfx = [s for s in cp_target if (s not in cp_no_suffix)]
-
-    summed_yield_df.drop(cp_sfx, inplace=True, axis=1)
-    summed_yield_df.drop('alpha', inplace=True, axis=1)
-    cp_target = cp_no_suffix
-
-    return summed_yield_df, cp_target
-
-
-def thompson(e, energy_k, energy_e, binary_e):
-    # with energy e and the constants
-    # energy_k (PDF scaling factor),
-    # energy_e (binding energy), and
-    # binary_e (maximum binary collision energy)
-    n_part = e / (e + energy_e) ** 3 * (1 - ((e + energy_e) / binary_e) ** (1 / 2))
-    if energy_k > 0:
-        n_part /= energy_k
-    else:
-        n_part = 0
-    return n_part
-
-
-def eckstein(angle, b, c, f, y0):
-    angle0 = 90  # in degrees
-    return y0 * (np.cos((angle / angle0 * np.pi / 2) ** c)) ** (-f) * np.exp(
-        (b * (1 - 1 / np.cos((angle / angle0 * np.pi / 2) ** c))))
-
-
-def cosfit(angle, cos_k, cos_tilt, cos_m, cos_n):
-    # for x > cos_tilt
-    leqcos_tilt = np.power(np.abs(np.cos((cos_tilt - angle) / (1 - 2 / np.pi * cos_tilt))), cos_m)
-    geqcos_tilt = np.power(np.abs(np.cos((angle - cos_tilt) / (1 - 2 / np.pi * cos_tilt))), cos_n)
-    # for x < cos_tilt
-    nr_part = np.heaviside(cos_tilt - angle, 0.5) * leqcos_tilt + \
-              np.heaviside(angle - cos_tilt, 0.5) * geqcos_tilt
-    if cos_k > 0:
-        nr_part /= cos_k
-    else:
-        nr_part = 0
-    return nr_part
-
-
-def fit_eq(df, eq, binary_e=1e5, init_guess=None):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        fxn()
-        # mask all values that are too close to the origin (makes it nigh impossible to fit)
-        if eq == cosfit:
-            maskforfit = [-1.4 < x < 0.8 for x in df.iloc[:, 0]]
-            xdata = df[maskforfit].iloc[:, 0]
-            ydata = df[maskforfit].iloc[:, 1]
-            popt, pcov = curve_fit(f=eq,
-                                   xdata=xdata,
-                                   ydata=ydata,
-                                   # bounds=([-np.pi/3,0.8, 0.8], [np.pi/3, 3,3]),
-                                   p0=[xdata.max(), deg2rad(-5), 2, 1],
-                                   # p0=[-40/deg_from_rad,2,1],
-                                   # sigma=ydata**-2,
-                                   # method='trf',
-                                   maxfev=2000)
-
-            """
-            Determine normalization factor
-            """
-            theta_tilt = popt[1]
-            theta_m = popt[2]
-            theta_n = popt[3]
-            k_leq, k_leq_error = integrate.quad(
-                lambda x: np.power(np.cos((-abs(theta_tilt) - x) / (1 - 2 / np.pi * -abs(theta_tilt))), theta_m),
-                -np.pi / 2, -abs(theta_tilt))
-
-            k_geq, k_geq_error = integrate.quad(
-                lambda x: np.power(np.cos((x - theta_tilt) / (1 - 2 / np.pi * theta_tilt)), theta_n), theta_tilt,
-                np.pi / 2)
-            popt[0] = k_leq + k_geq
-            return popt, pcov
-
-        elif eq == thompson:
-            xdata = df.iloc[:, 0].to_numpy()
-            ydata = df.iloc[:, 1].to_numpy()
-            popt, pcov = curve_fit(eq, xdata, ydata, p0=[0.5,
-                                                         xdata[np.where(ydata == ydata.max())][0],
-                                                         binary_e],
-                                   maxfev=1000)
-            energy_e = popt[1]
-            # popt[0] = integrate.quad(eq, 0, args=(1, energy_e, binary_e))
-            popt[0], _ = integrate.quad(lambda E: E / (E + energy_e) ** 3
-                                                  * (1 - ((E + energy_e) / binary_e) ** (1 / 2)),
-                                        0.1,
-                                        binary_e)
-
-            popt = popt[:2]  # drop binary_e again
-            return popt, pcov
-        elif eq == lobeFunction:
-            bounds = [(0, np.pi / 2), (0.0, np.pi/4), (1, 5), (1, 5)]
-            if init_guess is None:
-                result = minimize(costfunction,
-                                  bounds=bounds,
-                                  method='L-BFGS-B',
-                                  args=(df,))
-
-            else:
-                result = minimize(costfunction,
-                                  bounds=bounds,
-                                  method='L-BFGS-B',
-                                  x0=init_guess,
-                                  args=(df,))
-            solution = result['x']
-
-
-            return solution
-
-
-def normalize_df(df):
-    df.dropna(inplace=True, axis=1)
-    df = df.loc[:, (df != 0).any(axis=0)]
-    df = df.T
-    df /= df.sum(axis=0).values[0]
-    return df
-
-def normalize_dfs(df_a):
-    for dd, df in enumerate(df_a):
-        df.dropna(inplace=True, axis=1)
-        df = df.loc[:, (df != 0).any(axis=0)]
-        df = df.T
-        df /= df.sum(axis=0).values[0]
-        df_a[dd] = df
-    return df_a
 
 def closest_entry(input_list, input_value):
 
@@ -231,6 +44,7 @@ def closest_entry(input_list, input_value):
 
 class Particles:
     def __init__(self, verbose=False, show_plot=False):
+
         self.maindir = os.path.dirname(os.path.realpath(__file__))
         self.tabledir = os.path.join(self.maindir, 'tables')
         
@@ -263,6 +77,7 @@ class Particles:
         self.show_plot = show_plot
         self.isDebug = False
         self.isVerbose = verbose  # SpuBase tells you what it's currently doing in detail
+        self.force_reload = False  # if False, reads fit parameters from existing file if any
 
         # --- PLOTTING ---
         self.logplot = False  # sets y-axis of plots to be a log 10 scale
@@ -287,8 +102,9 @@ class Particles:
         self.min_not_included = ['Cor', 'Ap']
         self.dist_angle = 45  # default incident angle for outputs is 45°
 
-        self.angles_expanded_a = list(np.linspace(0.0, 88.0, num=89, dtype='int'))
         self.angles_a = [0, 10, 20, 30, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72, 74, 76, 78, 80, 82, 84, 86, 88, 89]
+        self.angles_expanded_a = np.linspace(min(self.angles_a), max(self.angles_a),
+                                             num=max(self.angles_a)+1, dtype='int')
 
         self.params = ['theta_k', 'theta_tilt', 'theta_m', 'theta_n',
                        'plume_k', 'plume_tilt', 'plume_m', 'plume_n',
@@ -296,7 +112,7 @@ class Particles:
 
         # dictionaries and table data
         self.mindict_df_atoms = pd.read_csv(os.path.join(self.tabledir, 'minerals_atoms.txt'), header=0, index_col=0)
-        table_dir_atoms = os.path.join(self.tabledir, "table1.txt")  # table for atomic properties; adapted from standard SDTrimSP table
+        table_dir_atoms = os.path.join(self.tabledir, "table1.txt")  # adapted SDTrimSP table for at properties
         self.at_density_df_atoms = pd.read_csv(table_dir_atoms, sep="\s+", usecols=['atomic_density'], index_col=0,
                                                skiprows=10, encoding='latin-1')
         table_dir_minerals = os.path.join(self.tabledir, "rho_minerals.txt")
@@ -304,13 +120,16 @@ class Particles:
                                                   index_col=0, encoding='latin-1')
         self.wt_density_df_minerals_dic = self.wt_density_df_minerals.T.to_dict('index')['g/cm3']
         self.mindict_df_oxides = pd.read_csv(os.path.join(self.tabledir, 'minerals_oxides.txt'), header=0, index_col=0)
-        table_dir_oxides = os.path.join(self.tabledir, "table_compound.txt")  # table for oxide properties from standard SDTrimSP table
+        table_dir_oxides = os.path.join(self.tabledir, "table_compound.txt")  # adapted SDTrimSP table for ox properties
         self.oxides_df = pd.read_csv(table_dir_oxides, sep="\s+", index_col=0, skiprows=5, encoding='latin-1')
         self.at_density_df_oxides = self.oxides_df['atomic_density']
 
-        self.amu_elements = pd.read_csv(os.path.join(self.tabledir, 'amu_elements.txt'), index_col=0, header=0, delim_whitespace=True)
-        self.amu_oxides = pd.read_csv(os.path.join(self.tabledir, 'amu_oxides.txt'), index_col=0, header=0, delim_whitespace=True)
-        self.amu_minerals = pd.read_csv(os.path.join(self.tabledir, 'amu_minerals.txt'), index_col=0, header=0, delim_whitespace=True)
+        self.amu_elements = pd.read_csv(os.path.join(self.tabledir, 'amu_elements.txt'),
+                                        index_col=0, header=0, delim_whitespace=True)
+        self.amu_oxides = pd.read_csv(os.path.join(self.tabledir, 'amu_oxides.txt'),
+                                      index_col=0, header=0, delim_whitespace=True)
+        self.amu_minerals = pd.read_csv(os.path.join(self.tabledir, 'amu_minerals.txt'),
+                                        index_col=0, header=0, delim_whitespace=True)
 
         self.amu_dic = self.amu_elements.T.to_dict('index')['amu']
         self.amu_oxides_dic = self.amu_oxides.T.to_dict('index')['amu']
@@ -325,6 +144,11 @@ class Particles:
             print(f'DB directory: {self.DBdir}')
 
         self.sw_comparison = False  # todo: remove this check if not needed anymore
+
+    # Imported methods
+    from .src._fitting_sb import eckstein_fit_data
+    from .src._cipw_sb import cipw_norm, surface_composition
+    from .src._plotting_sb import plot_yield, create_color_palette, plot_dist
 
     def update_file_format(self, form='png'):
         self.file_format = form
@@ -370,55 +194,15 @@ class Particles:
             print(f'impactor changed to {self.impactor}')
             return
 
-    def sfx_for_plot(self, drop_prefix=True):
-        """
-        Replaces short forms with human-readable descriptions. Used in legends and titles.
-        """
-        numbers = re.compile(r'(\d+)')
+    def get_binary_e(self, target_species, spec_impactor=None):
+        energy_impactor = self.energy_impactor
+        mass_impactor = self.mass_impactor
 
-        sfx = [self.sfx]
-        sfx = [sf.replace("exp_", "") for sf in sfx]
-        sfx = [sf.replace("sbbxd", "_HB-CD") for sf in sfx]
-        sfx = [sf.replace("sbba", "_HB") for sf in sfx]
-        sfx = [sf.replace("sbad", "_SB-D") for sf in sfx]
-        sfx = [sf.replace("sbbxf", "_HB-C") for sf in sfx]
-        sfx = [sf.replace("sbbx", "_HB-C") for sf in sfx]
-
-        sfx = [sf.replace("bba", "_BB") for sf in sfx]
-        sfx = [sf.replace("bbx", "_BB-C") for sf in sfx]
-
-        sfx = [sf.replace("sba", "_SB") for sf in sfx]
-        sfx = [sf.replace("sbx", "_SB-C") for sf in sfx]
-        sfx = [sf.replace("sz2", "SDTrimSP:Szabo+2020") for sf in sfx]
-        sfx = [sf.replace("mor", "SDTrimSP:Morrissey+2022") for sf in sfx]
-        sfx = [sf.replace("+", "_et_al._") for sf in sfx]
-
-        sfx = [numbers.sub(r'(\1)', sf) for sf in sfx]  # puts brackets around number
-
-        sfx = [sf.replace("sbas", "_SB_(static)") for sf in sfx]
-        sfx = [sf.replace("sbxs", "_SB-C_(static)") for sf in sfx]
-
-        sfx = [sf.replace("_SB", "SDTrimSP:SB") for sf in sfx]
-        sfx = [sf.replace("_BB", "SDTrimSP:BB") for sf in sfx]
-        sfx = [sf.replace("_HB", "SDTrimSP:HB") for sf in sfx]
-        sfx = [sf.replace("SDTrimSP_", "SDTrimSP:") for sf in sfx]
-        sfx = [sf.replace("TRIM", "TRIM:") for sf in sfx]
-        sfx = [sf.replace("_", " ") for sf in sfx]
-        if drop_prefix:
-            sfx = [sf.replace("SDTrimSP:", "") for sf in sfx]
-            sfx = [sf.replace("TRIM:", "") for sf in sfx]
-        return sfx[0]
-
-    def get_binary_e(self, target_species, spec_impc=None):
-        if spec_impc == 'SW' or spec_impc is None:
-            energy_impactor = self.energy_impactor
-            mass_impactor = self.mass_impactor
-
-        elif spec_impc:
+        if spec_impactor and spec_impactor != 'SW':
             # average energy and mass of impactor,
             # given the solar wind ion composition
-            energy_impactor = [*map(self.ekin.get, spec_impc)][0]
-            mass_impactor = [*map(self.amu_dic.get, spec_impc)][0]
+            energy_impactor = [*map(self.ekin.get, spec_impactor)][0]
+            mass_impactor = [*map(self.amu_dic.get, spec_impactor)][0]
 
         mass_target = [*map(self.amu_dic.get, [target_species])]
         if target_species == 'amu/ion':
@@ -427,160 +211,7 @@ class Particles:
                 mass_impactor + mass_target[0]) ** (-2)
         return binary_e
 
-    def surfcomp(self, comp_df=None, form=None):
-        """
-        Determine atomic composition based on mineral composition
-        """
-
-        if comp_df is not None:
-            # Cleans up passed composition dataframe by dropping zero columns
-            # and any mineral that is not part of the databse.
-            comp_df = comp_df.loc[:, (comp_df != 0).any(axis=0)]
-            mineral_all = [col for col in comp_df.T.columns]
-            comp_df.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
-
-            if form == 'mol%':
-                minfrac_mol = comp_df
-                minfrac_wt = comp_df.mul(pd.Series(self.amu_minerals_dic))
-                minfrac_vol = minfrac_wt.div(pd.Series(self.wt_density_df_minerals_dic))
-
-            elif form == 'wt%':
-                minfrac_wt = comp_df
-                minfrac_vol = comp_df.div(pd.Series(self.amu_minerals_dic))
-                minfrac_mol = comp_df.div(pd.Series(self.wt_density_df_minerals_dic))
-
-            elif form == 'vol%':
-                minfrac_vol = comp_df
-                minfrac_wt = comp_df.mul(pd.Series(self.wt_density_df_minerals_dic))
-                minfrac_mol = minfrac_wt.div(pd.Series(self.amu_minerals_dic))
-
-            else:
-                print('Volume percent mineral fractions were assumed.\n'
-                      'Pass form="mol%" or "wt%" instead for molar/weight fractions\n')
-                minfrac_vol = comp_df
-                minfrac_wt = comp_df.mul(pd.Series(self.wt_density_df_minerals_dic))
-                minfrac_mol = minfrac_wt.div(pd.Series(self.amu_minerals_dic))
-
-
-            minfrac_wt, minfrac_vol, minfrac_mol = normalize_dfs([minfrac_wt, minfrac_vol, minfrac_mol])
-
-
-            self.minfrac_df_volume = minfrac_vol
-            self.minfrac_df_volume.drop(self.min_not_included, inplace=True, errors='ignore', axis=1)
-
-        else:
-            self.minfrac_df_volume = self.minfrac_df_volume.loc[:, (self.minfrac_df_volume != 0).any(axis=0)]
-            mineral_all = [col for col in self.minfrac_df_volume.T.columns]
-            self.minfrac_df_volume.drop(self.min_not_included, inplace=True, errors='ignore', axis=0)
-
-        # Creates separate array for mineral names and mineral fractions
-        try:
-            self.mineral_a = [col for col in self.minfrac_df_volume.T.columns]
-        except:
-            self.mineral_a = [col for col in self.minfrac_df_volume.T.columns]
-
-        self.minfrac_a = self.minfrac_df_volume.T.values.tolist()[0]
-
-        # Get mineral dictionary that connects elements to minerals
-        mindict_df_atoms = self.mindict_df_atoms.loc[:, self.mindict_df_atoms.columns != 'total']
-        out = []
-        for mm, mineral in enumerate(self.mineral_a):
-            out.append(mindict_df_atoms.loc[mineral].mul(self.minfrac_a[mm]).values.tolist())
-        mincomp_df = pd.DataFrame(out, columns=list(mindict_df_atoms), index=self.mineral_a)
-        sumcomp_df = mincomp_df.sum()
-        sumcomp_df = sumcomp_df[~(sumcomp_df == 0)]  # drop all rows that are zero
-
-        # obtain all non-zero elements that are present
-        self.species_a = sumcomp_df.index.values.tolist()
-
-        # Print mineral composition and fraction of total mineralogy present within database
-        print(f'\nSum of mineral data available in SpuBase is {sumcomp_df.sum():0.2f}/1.00\n')
-        if sumcomp_df.sum() < 0.99:
-            missing_minerals = list(set(mineral_all).intersection(self.min_not_included))
-            print(f'Minerals not in SpuBase: {missing_minerals}')
-
-    
-    def eckstein_fit_data(self):
-
-        if 'SW' in self.impactor:
-            impactors_a = ['H', 'He']
-            sw_comp = self.sw_comp
-        else:
-            impactors_a = [self.impactor]
-            sw_comp = [1]
-
-        # average energy and mass of impactor, given the solar wind ion composition
-        self.energy_impactor = sum([*map(self.ekin.get, impactors_a)] * np.array(sw_comp))
-        self.mass_impactor = sum([*map(self.amu_dic.get, impactors_a)] * np.array(sw_comp))
-
-        if not self.sw_comparison:  # todo: remove this check
-            if 'SW' in self.impactor and self.sw_comp[0] == 0.96:
-                impactors_a = ['SW']
-                sw_comp = [1]
-
-        eckstein_dfdf = pd.DataFrame(columns=self.mineral_a)
-        data_dfdf = pd.DataFrame(columns=self.mineral_a)
-        for mm, mineral in enumerate(self.mineral_a):
-            if self.isDebug:
-                print(f'{mineral}')
-            data_df = pd.DataFrame(columns=impactors_a)
-            eckstein_df = pd.DataFrame(columns=impactors_a)
-            sfx = self.sfx
-            if self.sulfur_diffusion and mineral in ['Tro', 'Nng', 'Abd', 'Bzn', 'Was', 'Old', 'Dbr']:
-                sfx = 'sbbxd'
-
-            for ii, impactor in enumerate(impactors_a):
-                input_dir = os.path.join(self.maindir, 'data', sfx)
-                data_dir = os.path.join(input_dir, f'{impactor}_{mineral}_{sfx}_part_info.txt')
-
-                data = pd.read_csv(data_dir, encoding='utf-8')
-                data.set_index('alpha', drop=False, inplace=True)
-                data.fillna(0, inplace=True)
-
-                """
-                Eckstein fit of yield for all components
-                """
-                columns = list(data.columns)
-                cp_target = columns[columns.index('alpha') + 1:columns.index('amu/ion') + 1]
-
-                angles = list(data['alpha'])
-
-                element_yield_df, cp_aux = sum_up_same(data, cp_target)
-
-                eckstein_param_df = pandas.DataFrame(columns=cp_aux)
-                for element in cp_aux:
-
-                    if len(angles) == 1:
-                        break
-                    x_values = element_yield_df.index.values
-                    y_values = element_yield_df[element].values
-                    x_weight = invpairdiff(x_values)
-                    y0 = y_values[6]  # yield at normal incidence is rarely in equilibrium and thus stoichiometric
-
-                    # curve fit with weights (sigma) based on distance between points
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        fxn()
-                        anti_overflow_fac = 1e6
-                        popt, _ = curve_fit(lambda angle, b_var, c_var, f_var:
-                                            eckstein(angle, b_var, c_var, f_var, anti_overflow_fac * y0),
-                                            x_values,
-                                            anti_overflow_fac * y_values,
-                                            sigma=x_weight)
-                        b, c, f = popt
-                        if self.isDebug:
-                            print(f'{element}: {popt}')
-                        eckstein_param_df[element] = [b, c, f, y0]
-
-                data_df[impactor] = [data]
-                eckstein_df[impactor] = [eckstein_param_df]
-
-            eckstein_dfdf[mineral] = [eckstein_df]
-            data_dfdf[mineral] = [data_df]
-
-        return data_dfdf, eckstein_dfdf
-
-    def dataseries(self):
+    def data_series(self):
         """
         Creates a dataframe with nested dataframes
         Structure:
@@ -598,7 +229,7 @@ class Particles:
         dist_fit_params = [param + '_' + sfx for sfx in mineral_suffix for param in self.params]
         dist_fit_header = np.concatenate([['alpha'], dist_fit_params])
 
-        yield_df = pd.DataFrame(data=self.angles_a, columns=['alpha'])
+        yield_df = pd.DataFrame(data=self.angles_expanded_a, columns=['alpha'])
         yield_df = yield_df.set_index('alpha')
 
         # if amu info is to be plotted, then the elements in the species_a are replaced by amu from here on out
@@ -607,15 +238,15 @@ class Particles:
             # todo: add amu/ion to the species_a instead and then differentiate when calling?
 
         # create DF with a single column made up of the self.species_a components
-        particledata_df = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
+        particle_data_df = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
 
         data_dfdf, eckstein_dfdf = self.eckstein_fit_data()
 
         for ss, species in enumerate(self.species_a):
-            collect_yield = np.zeros(len(self.angles_a))  # total yield at each step
+            collect_yield = np.zeros(len(self.angles_expanded_a))  # total yield at each step
             element_yield = pd.DataFrame(columns=self.mineral_a)
 
-            particle_info = self.angles_a
+            particle_info = self.angles_expanded_a
             for ff, mineral in enumerate(self.mineral_a):
 
                 # --- FIX Missing Entries whilst writing fitting params into dataframe ---
@@ -643,20 +274,26 @@ class Particles:
 
             iparticledata_df = pd.DataFrame(particle_info, columns=dist_fit_header)
             yield_df[species] = collect_yield
-            particledata_df[species] = [iparticledata_df]
+            particle_data_df[species] = [iparticledata_df.loc[(iparticledata_df.loc[:,
+                                                              iparticledata_df.columns != 'alpha'] != 0).any(axis=1)]]
             self.yield_system_dfdf[species] = [element_yield]
-            self.particledata_df = particledata_df
+            self.particledata_df = particle_data_df
 
         yield_df = yield_df.fillna(0)
         self.yield_df = yield_df.loc[:, (yield_df != 0).any(axis=0)]  # drop all columns that are pure zeroes
-        self.yield_df = self.expand_series(self.yield_df)
-        print(self.yield_df)
+        #self.yield_df = self.expand_series(self.yield_df)
+
         if self.is_summed_up and not self.return_amu_ion:
             self.particle_data_refit()
 
-        print(
-              f'Data for {self.casename} created\n'
-              )
+        if self.force_reload:
+            print(
+                f'Data for {self.casename} loaded\n'
+            )
+        else:
+            print(
+                  f'Data for {self.casename} created\n'
+                  )
 
     def particle_data_impactor_refit(self, species, data_df, species_is_in_mineral, eckstein_df, iminfrac):
 
@@ -665,7 +302,6 @@ class Particles:
         iadist = []
         iplume = []
         iedist = []
-
 
         if not self.sw_comparison:  # todo: remove this check and the content of the 'else'
 
@@ -699,9 +335,10 @@ class Particles:
         plume_mesh = list(itertools.product(theta_3d, phi_3d))
         plume_df = pd.DataFrame(data=plume_mesh, columns=['theta', 'phi'])
 
-        for aa, angle in enumerate(self.angles_a):
+        for aa, angle in enumerate(self.angles_expanded_a):
 
             iyield_mb = 0
+
             iadist_params = [0, 0, 0, 0]
             iplume_params = [0, 0, 0, 0]
             iedist_params = [0, 0]
@@ -714,7 +351,8 @@ class Particles:
                     # write component into dataframe column
                     eckparam = eckstein_df[impactor][0]
                     iyield_mb += sw_comp[ii] * eckstein(angle, *eckparam[species])
-                    if not self.return_amu_ion:
+
+                    if angle in self.angles_a and not self.return_amu_ion:
                         data = data_df[impactor][0]
                         theta_k = data[f'thetaK_{species}'].loc[angle]
                         theta_tilt = data[f'thetaTilt_{species}'].loc[angle]
@@ -736,13 +374,13 @@ class Particles:
                             fxn()
                             binary_e = self.get_binary_e(species, impactor)
                             adist_particles = np.array(cosfit(theta_a, *iadist_params)) * sw_comp[ii]
-                            plume_particles = lobeFunction(iplume_params, plume_df)['rho'] * sw_comp[ii]
+                            plume_particles = lobe_function(iplume_params, plume_df)['rho'] * sw_comp[ii]
                             edist_particles = np.array(thompson(energy_a, *iedist_params, binary_e)) * sw_comp[ii]
                         a_isumpart = np.add(a_isumpart, np.nan_to_num(adist_particles, copy=False))
                         p_isumpart = np.add(p_isumpart, np.nan_to_num(plume_particles, copy=False))
                         e_isumpart = np.add(e_isumpart, np.nan_to_num(edist_particles, copy=False))
 
-            if len(impactors_a) > 1 and species_is_in_mineral and not self.return_amu_ion:
+            if len(impactors_a) > 1 and angle in self.angles_a and species_is_in_mineral and not self.return_amu_ion:
                 theta_df = pd.DataFrame([theta_a, a_isumpart]).T
                 energy_df = pd.DataFrame([energy_a, e_isumpart]).T
                 plume_df['rho'] = p_isumpart
@@ -751,7 +389,7 @@ class Particles:
 
                 iadist_params, a_pcov = fit_eq(theta_df, eq=cosfit)
 
-                iplume_params = fit_eq(plume_df, eq=lobeFunction, init_guess=init_guess)
+                iplume_params = fit_eq(plume_df, eq=lobe_function, init_guess=init_guess)
                 iedist_params, e_pcov = fit_eq(energy_df, eq=thompson, binary_e=binary_e)
 
             iyield.append(iyield_mb)
@@ -763,7 +401,7 @@ class Particles:
 
         return iyield, iadist, iplume, iedist
 
-    def particle_data_refit(self, reimport=False):
+    def particle_data_refit(self):
         # For each impact angle
         # Create data points for each element with mineral-specific fit parameters
         # Scale the data points with the mineral-specific element yield
@@ -772,13 +410,19 @@ class Particles:
         # The output is a nested dataframe with element columns on the first layer
         # and fit parameter dataframes on the second layer
 
-        export_path = os.path.join(self.outdir, f'{self.impactor}_{self.casename}_particle_data.txt')
+        # creat suffix for exported data
+        name_comp_dict = self.minfrac_df_volume['frac'].apply(lambda x: '{:,.2f}'.format(x)).to_dict()
+        icomp_sfx = []
+        [icomp_sfx.extend([k, v]) for k, v in name_comp_dict.items()]
+        comp_sfx = ''.join(icomp_sfx)
+
+        export_dir = os.path.join(self.outdir, f'{self.impactor}_{self.casename}_particle_data_{comp_sfx}.txt')
         self.refitparticledata_df = pd.DataFrame(columns=self.species_a)
 
-        if os.path.isfile(export_path) and not reimport:
+        mindict_df_atoms = self.mindict_df_atoms.loc[:, self.mindict_df_atoms.columns != 'total']
+        if os.path.isfile(export_dir) and self.is_summed_up and not self.force_reload :
 
-            single_file_df = pd.read_csv(export_path, sep=',')
-
+            single_file_df = pd.read_csv(export_dir, sep=',')
 
             for species in self.species_a:
                 species_params = [entry for entry in single_file_df.columns if entry.endswith(species)]
@@ -803,8 +447,10 @@ class Particles:
         print("\nSum up particles from minerals and perform a re-fit\n"
               "Progress:")
         for ss, species in enumerate(self.species_a):
-            mineral_process = 100 / len(self.species_a)
-            print(f'{mineral_process * ss:0.1f}% {species}')
+
+            total_progress = 100 / len(self.species_a)
+            print(f'{total_progress * ss:0.1f}% {species}')
+
             isummed = pd.DataFrame(columns=['alpha', *self.params])
             isummed['alpha'] = self.angles_a
             isummed.set_index('alpha', inplace=True)
@@ -816,27 +462,35 @@ class Particles:
 
             for aa, angle in enumerate(self.angles_a):
                 if (aa+1) % 5 == 0:
-                    print(f'{mineral_process  * ss + mineral_process/len(self.angles_a) * aa:0.1f}%')
+                    print(f'{total_progress  * ss + total_progress/len(self.angles_a) * aa:0.1f}%')
                 a_isumpart = np.zeros(len(theta_a))
                 e_isumpart = np.zeros(len(energy_a))
                 p_isumpart = np.zeros(len(plume_mesh))
                 for mm, mineral in enumerate(self.mineral_a):
-                    param_minsfx = [param + f'_{mineral}' for param in self.params]
-                    fitparams = fitparam_df[param_minsfx]  # all fit parameters of the given mineral
-                    iadist_params = fitparams[param_minsfx[0:4]].iloc[int(aa)]
-                    iplume_params = fitparams[param_minsfx[4:8]].iloc[int(aa)]
-                    iedist_params = fitparams[param_minsfx[8:]].iloc[int(aa)]
-                    binary_e = self.get_binary_e(species)
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        fxn()
-                        mineral_element_yield = self.yield_system_dfdf[species][0][mineral].iloc[aa]
-                        adist_particles = np.array(cosfit(theta_a, *iadist_params)) * mineral_element_yield
-                        pdist_particles = lobeFunction(iplume_params, plume_df)['rho'] * mineral_element_yield
-                        edist_particles = np.array(thompson(energy_a, *iedist_params, binary_e)) * mineral_element_yield
-                    a_isumpart = np.add(a_isumpart, np.nan_to_num(adist_particles, copy=False))
-                    e_isumpart = np.add(e_isumpart, np.nan_to_num(edist_particles, copy=False))
-                    p_isumpart = np.add(p_isumpart, np.nan_to_num(pdist_particles, copy=False))
+                    mineral_comp = mindict_df_atoms.loc[mineral]
+                    species_list = mineral_comp.loc[mineral_comp != 0].index.tolist()
+                    # species_list += ['amu/ion']  # todo: make sure that amu/ion is added to the output dataframe!
+                    species_is_in_mineral = species in species_list  # find out if the species is present in the dataset
+
+                    if species_is_in_mineral:
+                        param_minsfx = [param + f'_{mineral}' for param in self.params]
+                        fitparams = fitparam_df[param_minsfx]  # all fit parameters of the given mineral
+                        iadist_params = fitparams[param_minsfx[0:4]].iloc[int(aa)]
+                        iplume_params = fitparams[param_minsfx[4:8]].iloc[int(aa)]
+                        iedist_params = fitparams[param_minsfx[8:]].iloc[int(aa)]
+                        binary_e = self.get_binary_e(species)
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            fxn()
+                            mineral_element_yield = self.yield_system_dfdf[species][0][mineral].iloc[aa]
+                            adist_particles = np.array(cosfit(theta_a, *iadist_params)) * mineral_element_yield
+                            pdist_particles = lobe_function(iplume_params, plume_df)['rho'] * mineral_element_yield
+                            edist_particles = np.array(thompson(energy_a, *iedist_params, binary_e)) * mineral_element_yield
+                        a_isumpart = np.add(a_isumpart, np.nan_to_num(adist_particles, copy=False))
+                        e_isumpart = np.add(e_isumpart, np.nan_to_num(edist_particles, copy=False))
+                        p_isumpart = np.add(p_isumpart, np.nan_to_num(pdist_particles, copy=False))
+                    # elif angle == 0 and not species_is_in_mineral:
+                    #     print(f'{species} not in {mineral}')
 
 
                 if len(self.mineral_a) > 1:
@@ -846,7 +500,7 @@ class Particles:
                     init_guess = iplume_params
                     init_guess.iloc[0] = plume_df['rho'].max()
                     iadist_params, a_pcov = fit_eq(theta_df, eq=cosfit)  # angle fit
-                    iplume_params = fit_eq(plume_df, eq=lobeFunction, init_guess=init_guess)
+                    iplume_params = fit_eq(plume_df, eq=lobe_function, init_guess=init_guess)
                     iedist_params, e_pcov = fit_eq(energy_df, eq=thompson, binary_e=binary_e)  # energy fit
 
                 isummed.loc[int(angle)] = np.concatenate((iadist_params, iplume_params, iedist_params), axis=None)
@@ -856,8 +510,8 @@ class Particles:
                     DEBUG: print summed data and fit
                     """
                     if angle in self.angles_a[::10]:
-                        fig_adist_azimuth = plt.figure(dpi=300, figsize=(2*4, 1*4))
-                        ax_adist = fig_adist_azimuth.add_subplot(1, 2, 1, projection="polar")
+                        fig_adist_polar = plt.figure(dpi=300, figsize=(2*4, 1*4))
+                        ax_adist = fig_adist_polar.add_subplot(1, 2, 1, projection="polar")
                         ## data:
                         plot_yield_df = pd.DataFrame(index=theta_a,
                                                      data=a_isumpart,
@@ -881,7 +535,7 @@ class Particles:
                                      data=plot_yieldFit_df,
                                      palette=['#C85200'],
                                      alpha=1.0)
-                        fig_adist_azimuth.savefig(self.outdir + f'adist_{species}_debug-{angle}.{self.file_format}',
+                        fig_adist_polar.savefig(self.outdir + f'adist_{species}_debug-{angle}.{self.file_format}',
                                                   dpi=300, format=self.file_format)
             self.refitparticledata_df[species] = [isummed]
 
@@ -913,7 +567,8 @@ class Particles:
         params_spec_sfx = [[param + '_' + species for param in self.params] for species in self.species_a]
         params_spec_sfx = list(np.append(self.species_a, params_spec_sfx))
 
-        single_file_df = pd.DataFrame(index=self.refitparticledata_df[self.species_a[0]][0].index, columns=params_spec_sfx)
+        single_file_df = pd.DataFrame(index=self.refitparticledata_df[self.species_a[0]][0].index,
+                                      columns=params_spec_sfx)
         single_file_df.index.name = 'alpha'
 
         single_file_df[self.species_a] = self.yield_df
@@ -925,39 +580,9 @@ class Particles:
         single_file_df = single_file_df.apply(pd.to_numeric, downcast='float').fillna(0)
         single_file_df.index = pd.to_numeric(single_file_df.index, downcast='integer')
 
-        export_path = os.path.join(self.outdir, f'{self.impactor}_{self.casename}_particle_data.txt')
-        single_file_df.to_csv(export_path, sep=',', float_format='{:.3E}'.format)
+        single_file_df.to_csv(export_dir, sep=',', float_format='{:.3E}'.format)
         if self.isVerbose:
-            print(f'Data exported as .csv to {export_path}')
-
-    def ColorPalette(self):
-        """ Create color palette for each species and line styles for each oxide"""
-
-        # todo: make a color scheme with suffixes
-
-        elements = self.species_a
-        mineral_suffixes = ['_' + val for val in self.mineral_a]
-        mineral_suffixes.append('')
-        element_mineral = [val + msfx for val in elements for msfx in mineral_suffixes]
-        element_suffixes = tuple((len(self.mineral_a) + 1) * [''])
-        elements = [val + esfx for val in elements for esfx in element_suffixes]
-
-        self.plotting_key = pd.DataFrame(elements, columns=['element'])
-        self.plotting_key['index'] = element_mineral  # new column with element + mineral name
-        self.plotting_key['color'] = elements  # new column with color
-        self.plotting_key['line'] = [(4, 1)] * len(elements)
-
-        cpalette = sns.color_palette("colorblind", len(self.species_a))  # the only qualitative colormap with >8 colors
-        cmap = np.array(cpalette.as_hex())
-
-        # cmap = np.delete(cmap, -2)  # drop yellow as it doesn't plot well
-        # cmap = np.roll(cmap, 2)  # roll grey to the front to ensure O is displayed in grey
-        # cmap = np.append(cmap, '#000000')
-
-        species_dict = dict(zip(self.species_a, cmap))  # dictionary linking element to color
-
-        self.plotting_key.replace({"color": species_dict}, inplace=True)  # apply species_dict
-        self.plotting_key.set_index("index", inplace=True, drop=True)  # replace index with elements, dropping column
+            print(f'Data exported as .csv to {export_dir}')
 
     def sputtered_particles_info(self, angles_l, species_l, param=''):
         for angle in angles_l:
@@ -1016,10 +641,10 @@ class Particles:
         theta_a = np.linspace(-np.pi/2, np.pi/2, num=nr_datapoints)  # full angular distribution is always necessary
         theta_bin = 2 * np.pi / nr_datapoints
 
-        edist_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
-        edist_loss_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
-        adist_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
-        plume_df: DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
+        edist_df: pd.DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
+        edist_loss_df: pd.DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
+        adist_df: pd.DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
+        plume_df: pd.DataFrame = pd.DataFrame(columns=self.species_a)  # returns bullshit for amu setting
 
         theta_3d = np.linspace(0, np.pi/2, int(nr_xyz_points))  # polar angle
         phi_3d = np.linspace(-np.pi, np.pi, int(nr_xyz_points))
@@ -1032,10 +657,10 @@ class Particles:
                   )
             print()
         for ss, species in enumerate(self.species_a):
-            iout_df_energy: DataFrame = pd.DataFrame(data=energy_a, columns=['energy'])
-            iout_df_energy_loss: DataFrame = pd.DataFrame(columns=[species], index=['loss'])
-            iout_df_plume: DataFrame = pd.DataFrame(data=plume_mesh, columns=['theta', 'phi'])
-            iout_df_angle: DataFrame = pd.DataFrame(data=theta_a, columns=['alpha'])
+            iout_df_energy: pd.DataFrame = pd.DataFrame(data=energy_a, columns=['energy'])
+            iout_df_energy_loss: pd.DataFrame = pd.DataFrame(columns=[species], index=['loss'])
+            iout_df_plume: pd.DataFrame = pd.DataFrame(data=plume_mesh, columns=['theta', 'phi'])
+            iout_df_polar: pd.DataFrame = pd.DataFrame(data=theta_a, columns=['alpha'])
 
             binary_e = self.get_binary_e(
                 species)  # maximum energy that can be transferred from impactor to species in BC
@@ -1053,11 +678,11 @@ class Particles:
                 theta_k, theta_tilt, theta_m, theta_n, plume_k, plume_tilt, plume_m, plume_n, energy_k, energy_e = parameters.values.tolist()
 
 
-                iout_df_angle[species] = cosfit(iout_df_angle['alpha'], theta_k, theta_tilt, theta_m, theta_n)
-                iout_df_angle[species] = iout_df_angle[species].mul(theta_bin)
+                iout_df_polar[species] = cosfit(iout_df_polar['alpha'], theta_k, theta_tilt, theta_m, theta_n)
+                iout_df_polar[species] = iout_df_polar[species].mul(theta_bin)
 
 
-                iout_df_plume[species] = lobeFunction([plume_k, plume_tilt, plume_m, plume_n], iout_df_plume)['rho']
+                iout_df_plume[species] = lobe_function([plume_k, plume_tilt, plume_m, plume_n], iout_df_plume)['rho']
                 iout_df_plume[species] = iout_df_plume[species].mul(xyz_bin)
 
                 iout_df_energy[species] = thompson(iout_df_energy['energy'], energy_k, energy_e, binary_e)
@@ -1097,25 +722,18 @@ class Particles:
                     theta_k, theta_tilt, theta_m, theta_n, plume_k, plume_tilt, plume_m, plume_n, energy_k, energy_e = \
                         parameters[parameters.index.str.contains(f'{mineral}(?!.)', regex=True)]
 
-                    iout_df_angle[species + '_' + mineral] = cosfit(iout_df_angle['alpha'],
+                    iout_df_polar[species + '_' + mineral] = cosfit(iout_df_polar['alpha'],
                                                                     theta_k, theta_tilt, theta_m, theta_n)
-                    iout_df_angle[species + '_' + mineral] = iout_df_angle[species + '_' + mineral].mul(theta_bin)
+                    iout_df_polar[species + '_' + mineral] = iout_df_polar[species + '_' + mineral].mul(theta_bin)
 
-                    iout_df_plume[species + '_' + mineral] = lobeFunction([plume_k, plume_tilt, plume_m, plume_n],
-                                                                          iout_df_plume)['rho']
+                    iout_df_plume[species + '_' + mineral] = lobe_function([plume_k, plume_tilt, plume_m, plume_n],
+                                                                           iout_df_plume)['rho']
                     iout_df_plume[species + '_' + mineral] = iout_df_plume[species + '_' + mineral].mul(xyz_bin)
 
                     iout_df_energy[species + '_' + mineral] = thompson(iout_df_energy['energy'],
                                                                        energy_k, energy_e, binary_e)
                     iout_df_energy[species + '_' + mineral] = iout_df_energy[species + '_' + mineral].mul(energy_bin)
 
-
-                    # iout_df_angle[species + '_' + mineral] = \
-                    #     iout_df_angle['alpha'].apply(lambda x: theta_bin * cosfit(x, theta_k, theta_tilt, theta_m, theta_n))
-                    #
-                    # iout_df_energy[species + '_' + mineral] = \
-                    #     iout_df_energy['energy'].apply(lambda x: energy_bin * thompson(x, energy_k,
-                    #                                                                    energy_e, binary_e))
 
                     if self.v_esc:
                         iout_df_energy_loss[species + '_' + mineral] = \
@@ -1129,19 +747,19 @@ class Particles:
                         print(energy_k)
                         print(plume_k)
                         print(f"Integrated angular distribution:"
-                              f"{sum(iout_df_angle[species + '_' + mineral].fillna(0))} (before flux)")
+                              f"{sum(iout_df_polar[species + '_' + mineral].fillna(0))} (before flux)")
                         print(f"Integrated energy distribution:"
                               f"{sum(iout_df_energy[species + '_' + mineral].fillna(0))} (before flux)")
                         print(f"Loss of energy distribution:"
                               f"{sum(iout_df_energy_loss[species + '_' + mineral].fillna(0))} (before flux)")
 
-            iout_df_angle = iout_df_angle.set_index('alpha').fillna(0)
+            iout_df_polar = iout_df_polar.set_index('alpha').fillna(0)
             iout_df_energy = iout_df_energy.set_index('energy').fillna(0)
             iout_df_plume = iout_df_plume.set_index(['phi', 'theta']).fillna(0)
 
             edist_df[species] = [iout_df_energy]
             edist_loss_df[species] = [iout_df_energy_loss]
-            adist_df[species] = [iout_df_angle]
+            adist_df[species] = [iout_df_polar]
             plume_df[species] = [iout_df_plume]
 
         self.edist_df = edist_df
@@ -1154,9 +772,10 @@ class Particles:
         # add interpolated data
         ##########################################
 
-        angles_range = np.linspace(0, 89, num=90, dtype='int')
+        angles_range = self.angles_expanded_a
 
         entries = [0] * len(angles_range)
+
         df.insert(0, 'alpha', df.index)
 
         for angle in self.angles_a:
@@ -1180,8 +799,7 @@ class Particles:
 
                 help_entries = [[entry for entry in entries[idx]] for idx in angles_added]
                 help_serie = pd.DataFrame(help_entries, columns=list(help_serie.columns.values))
-
-        expanded_serie = pd.DataFrame(entries, columns=list(help_serie.columns.values))
+        expanded_serie = pd.DataFrame(entries, columns=help_serie.columns.values)
 
         if species:
             ''' Re-calculate scaling factor '''
@@ -1191,23 +809,18 @@ class Particles:
                 Define maximum transferred energy in binary collision
                 '''
 
-                e_bc = self.get_binary_e(species, spec_impc=self.impactor)
+                e_bc = self.get_binary_e(species, spec_impactor=self.impactor)
 
                 theta_tilt = expanded_serie[self.params[1]].loc[row]
                 theta_m = expanded_serie[self.params[2]].loc[row]
                 theta_n = expanded_serie[self.params[3]].loc[row]
-                plume_tilt = expanded_serie[self.params[5]].loc[row]
+                plume_tilt = expanded_serie[self.params[5]].loc[row]  # not used, only determined in fit
                 plume_m = expanded_serie[self.params[6]].loc[row]
                 plume_n = expanded_serie[self.params[7]].loc[row]
                 energy_e = expanded_serie[self.params[9]].loc[row]
 
-                theta_k_leq_tilt, k_tilt_leq_error = integrate.quad(
-                    lambda x: np.power(np.cos((-abs(theta_tilt) - x) / (1 - 2 / np.pi * -abs(theta_tilt))), theta_m),
-                    -np.pi / 2, -abs(theta_tilt))
+                theta_k_leq_tilt, theta_k_geq_tilt = cosfit_integrate(theta_tilt, theta_m, theta_n)
 
-                theta_k_geq_tilt, k_tilt_geq_error = integrate.quad(
-                    lambda x: np.power(np.cos((x - theta_tilt) / (1 - 2 / np.pi * theta_tilt)), theta_n), theta_tilt,
-                    np.pi / 2)
                 # before = expanded_serie['phiK_'+species].loc[row]
                 expanded_serie[self.params[0]].loc[row] = theta_k_leq_tilt + theta_k_geq_tilt
                 phi_lower = -np.pi
@@ -1229,890 +842,7 @@ class Particles:
         expanded_serie.drop('alpha', inplace=True, axis=1)
         return expanded_serie
 
-    def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, title=None):
-        if self.isVerbose:
-            print(
-                  f'Plotting {dist} distribution'
-                  )
-        if species_l == None:
-            species_l = self.species_a
-
-        params = {'legend.fontsize': 'large',
-                  'figure.titlesize': 'x-large',
-                  'axes.labelsize': 'large',
-                  'axes.titlesize': 'medium',
-                  'xtick.labelsize': 'large',
-                  'ytick.labelsize': 'large'}
-        pylab.rcParams.update(params)
-
-        def times1e5(x, pos=None):
-            x = x * 1e5
-            return int(round(x, 0))
-
-        # def logscale(x, pos=None):
-        #     x = np.log10(x)
-        #     return int(round(x, 0))
-
-        yFormat = FuncFormatter(times1e5)
-
-        self.ColorPalette()  # create color palette based on the minerals present
-
-        if self.impactor == 'SW':
-            impactor = f'H$^+_{{{self.sw_comp[0]}}}$ He$^{{2+}}_{{{self.sw_comp[1]}}}$'
-        else:
-            impactor = self.impactor
-
-        if title is not None:
-            plottitle = title
-        else:
-            plottitle = f'{self.impactor} \u2192 {self.casename}'
-
-        title_impactor_angle = r'$\alpha_{in}$ = ' + str(self.dist_angle)
-
-        fig_dist = plt.figure(figsize=(6, 4.5), dpi=300)
-
-        if dist == 'energy':
-            ax_dist = fig_dist.add_subplot(1, 1, 1)
-            dist_df = self.edist_df
-            print(dist_df)
-            # if title == '':
-            #     title = f'Energy distribution'
-            if ion_flux != 1:
-                ax_dist.set_title(f'10$^{{{math.log(ion_flux, 10):.2g}}}\\times$ {impactor} ' + r'm$^2$s$^{-1}$')
-            else:
-                ax_dist.set_title(title_impactor_angle)
-
-        elif dist == 'angular':
-            dist_df = self.adist_df
-            print(dist_df)
-            ax_dist = fig_dist.add_subplot(1, 1, 1, projection="polar")
-            x_cut = 0.08
-            y_cut = -0.33
-            ax_dist.set_position([x_cut, -0.25, 1 - 2 * x_cut, 1 - 2 * y_cut])
-            ax_dist.set_title(title_impactor_angle)
-            # if ion_flux != 1:
-            #     ax_dist.set_title(
-            #     f'10$^{{{math.log(ion_flux,10):.2g}}}\\times$ {impactor} ' + r'm$^2$s$^{-1}$', y=.83)#, fontsize=10)
-            ax_dist.set_thetamin(90)
-            ax_dist.set_xlabel('at/ion')
-            ax_dist.set_thetamax(-90)
-            ax_dist.set_theta_zero_location("N")
-
-        elif dist == 'plume':
-            colors = ['red', 'black']
-            alpha = [0.6, 0.5]
-            cmaps = ['gray', 'jet']
-            msize = [1, 0.5]
-            dist_df = self.plume_df
-            print(dist_df)
-            ax_dist = fig_dist.add_subplot(121, projection='3d')
-            ax_dist_xyz = fig_dist.add_subplot(122, projection='3d')
-
-        else:
-            print('Pass either \'energy\' or \'angular\' as distribution (dist) type.')
-            sys.exit()
-
-        """
-        Return quantitative results.
-        """
-
-        i_ymax = 0
-        labels = []
-        loss_text = ['Loss fraction']
-        quant_dist = pd.DataFrame(columns=self.species_a)
-        for ss, species in enumerate(species_l):
-            if self.is_summed_up:
-                quant_dist_i = dist_df[species][0].apply(
-                    lambda x: x * ion_flux * self.yield_df[species].loc[self.dist_angle])
-            else:
-                quant_dist_i = dist_df[species].apply(
-                    lambda x: x * ion_flux * self.yield_df[species].loc[self.dist_angle])
-
-            quant_dist[species] = quant_dist_i
-
-            if self.is_summed_up:
-                peak_value = peak(quant_dist_i.index.values, quant_dist_i.iloc[:, 0])[0]  # get global maxima
-
-                if dist == 'energy':
-                    """ adds peak ENERGY value to label"""
-                    peak_label = r'$E_{{{}}}$'.format(species) + \
-                                 f' = {peak_value:2.1f}'.format(species) + ' eV'
-                    """Add escape velocity lines and loss fractions"""
-
-                elif dist == 'angular':
-                    """ adds peak ANGLE value to label"""
-                    peak_value = rad2deg(peak_value)
-                    peak_label = r'$\theta_{{{}}}$'.format(species) + \
-                                 f' = {peak_value:2.1f}'.format(species) + r'$^\circ$'
-
-                else:
-                    peak_label = ''
-
-                labels.append(f'{peak_label.rjust(2)}')
-
-                # todo: re-implement loss fraction in plot
-                # if self.v_esc:
-                #     lossfrac = self.edist_loss_df.iloc[0][species].values.tolist()[0][0]
-                #     loss_text.append(f'{species}: {lossfrac:.2%}')
-
-        if self.is_summed_up:
-
-            if dist == 'plume':
-                quant_dist = quant_dist.reset_index(names=['phi', 'theta'])
-
-                sin_theta = np.sin(quant_dist.theta)
-                cos_theta = np.cos(quant_dist.theta)
-                sin_phi = np.sin(quant_dist.phi)
-                cos_phi = np.cos(quant_dist.phi)
-
-
-
-                for species in self.species_a:
-                    quant_dist['x'] = sin_theta * cos_phi
-                    quant_dist['y'] = sin_theta * sin_phi
-                    quant_dist['z'] = cos_theta
-                    quant_dist[['x', 'y', 'z']] = quant_dist[['x', 'y', 'z']].mul(quant_dist[species], axis='index')
-                    color = self.plotting_key['color'].loc[species]
-                    # ax_dist.plot_trisurf(quant_dist['theta'], quant_dist['phi'], quant_dist[species], #cmap=plt.get_cmap(cmaps[1]),
-                    #                      linewidth=0, antialiased=False, alpha=0.1)
-                    # ax_dist_xyz.plot_trisurf(quant_dist['x'], quant_dist['y'], quant_dist['z'],
-                    #                          linewidth=0, antialiased=False, alpha=0.1)
-                    ax_dist.scatter(quant_dist['theta'], quant_dist['phi'], quant_dist[species], c=color, s=0.1)
-
-                    ax_dist_xyz.scatter(quant_dist['x'], quant_dist['y'], quant_dist[species], c=color, s=0.01)
-
-            else:
-                sns.lineplot(ax=ax_dist,
-                             data=quant_dist,
-                             palette=dict(self.plotting_key['color']),
-                             dashes=True,  # dict(self.plotting_key['line']),
-                             alpha=1.0)
-            if self.plot_inset and dist == 'energy' and not self.logplot:
-                ax_inset = inset_axes(ax_dist, width=1.4, height=1,
-                                      bbox_to_anchor=(0.68, 0.22),
-                                      bbox_transform=ax_dist.transAxes,
-                                      loc=3,
-                                      borderpad=0)
-                sns.lineplot(ax=ax_inset,
-                             data=quant_dist,
-                             palette=dict(self.plotting_key['color']),
-                             dashes=True,  # dict(self.plotting_key['line']),
-                             alpha=1.0)
-                ax_inset.set_xlim(0, 4)
-                ax_inset.set_ylim(0, 6e-5)
-                ax_inset.set_xlabel('')
-                ax_inset.yaxis.set_major_formatter(yFormat)
-                ax_inset.xaxis.set_major_locator(plt.MaxNLocator(2))
-                ax_inset.yaxis.set_major_locator(plt.MaxNLocator(3))
-                ax_inset.get_legend().remove()
-
-            if quant_dist.max().iloc[0] >= i_ymax and dist == 'energy':
-                i_ymax = quant_dist.max().max()
-
-        else:
-            for col in quant_dist.columns:
-                quant_dist[col][0].fillna(quant_dist[col][0].mode(), inplace=True)
-                quant_dist[col][0] = quant_dist[col][0].loc[:, (quant_dist[col][0] != 0).any(axis=0)]
-
-                if dist == 'plume':
-                    ax_dist.plot_trisurf(quant_dist[col][0]['theta'], quant_dist[col][0]['phi'], quant_dist[col][0]['rho'],
-                                         cmap=plt.get_cmap(cmaps[1]),
-                                         linewidth=0, antialiased=False, alpha=alpha[1])
-                    ax_dist_xyz.plot_trisurf(quant_dist[col][0]['x'], quant_dist[col][0]['y'], quant_dist[col][0]['z'],
-                                             cmap=plt.get_cmap(cmaps[1]),
-                                             linewidth=0, antialiased=False, alpha=alpha[1])
-                else:
-                    sns.lineplot(ax=ax_dist,
-                                 data=quant_dist[col][0],
-                                 palette=dict(self.plotting_key['color']),
-                                 dashes=True,  # dict(self.plotting_key['line']),
-                                 alpha=1.0)
-                if quant_dist[col][0].max().iloc[0] >= i_ymax and dist == 'energy':
-                    i_ymax = quant_dist[col][0].max().max()
-
-        """
-        Adjust axis limits depending on distribution type
-        """
-        if dist == 'energy':
-            ax_dist.set_xlabel(r'emission energy [eV]', ha='center')
-            ax_dist.set_xlim(0, 20)
-            ax_dist.set_ylim(0, i_ymax * 1.1)
-            if self.logplot:
-                ax_dist.set_yscale('log')
-            if e_lims:
-                ax_dist.set_xlim(0, e_lims[0])
-                ax_dist.set_ylim(0, e_lims[1])
-
-            if ion_flux == 1:
-                ax_dist.set_ylabel(r'particles [10$^{-5}$ at. ion$^{-1}$ eV$^{-1}$]')
-                if not self.logplot:
-                    ax_dist.yaxis.set_major_formatter(yFormat)
-
-
-            else:
-                ax_dist.set_ylabel(r'particles [at. ion$^{-1}$ eV$^{-1}$]')
-            ax_dist.xaxis.set_major_locator(plt.MaxNLocator(4))
-
-            # Adjust edist Legend
-            if self.is_summed_up:
-                handles, _ = ax_dist.get_legend_handles_labels()  # labels are pre-defined
-            else:
-                handles, labels = ax_dist.get_legend_handles_labels()
-                labels = [label.replace('_', '$_\mathrm{') + '}$' for label in labels]
-
-            if len(labels) > 0:
-                ax_dist.legend(handles,
-                               labels,
-                               loc='upper right',
-                               ncol=max(int(np.ceil(len(handles) / 6)), 1),
-                               frameon=False)
-
-        if dist == 'angular':
-
-            arrow_length = ax_dist.get_ylim()[1]
-
-            """
-            Two annotation commands are necessary as the arrow won't plot properly as it takes the length of the text
-            into account BEFORE plotting the arrow, resulting in a wrong positioning
-            """
-            ax_dist.annotate('', xy=[0, 0],
-                             xytext=[self.dist_angle / 180 * np.pi, arrow_length],
-                             xycoords='data',
-                             arrowprops=dict(facecolor='black')  # , fontsize='large'
-                             )
-            ax_dist.tick_params(labelleft=False, labelright=True,
-                                labeltop=False, labelbottom=True)
-            if ion_flux == 1:
-                ax_dist.set_xlabel(r'yield [10$^{-5}$ atoms ion$^{-1}$]')  # , fontsize=8)
-                if not self.logplot:
-                    ax_dist.yaxis.set_major_formatter(yFormat)
-            else:
-                ax_dist.set_xlabel(r'yield [atoms s$^{-1}$ cm$^{-2}$]')  # , fontsize=8)
-
-            ax_dist.xaxis.set_label_coords(0.25, 0.235)
-            ax_dist.yaxis.set_major_locator(plt.MaxNLocator(4))
-            if self.logplot:
-                ax_dist.set_rscale('symlog', linthresh=1e-5)
-                ax_dist.set_rlim(0)
-
-            """
-            Adjust adist Legend
-            """
-            if self.is_summed_up:  # or self.isMassBalanced #deprecated
-                handles, _ = ax_dist.get_legend_handles_labels()  # labels are pre-defined
-            else:
-                handles, labels = ax_dist.get_legend_handles_labels()  # labels are pre-defined
-                labels = [label.replace('_', '$_\mathrm{') + '}$' for label in labels]
-
-            yanchor = 0.00
-            nrows = 3
-            if self.is_summed_up:
-                yanchor = 0.21
-                nrows = 2
-
-            ax_dist.legend(handles,
-                           labels,
-                           loc='upper center',
-                           bbox_to_anchor=(0.5, yanchor),
-                           ncol=min(max(int(np.ceil(len(handles) / nrows)), 2), 3),
-                           frameon=False)
-
-        if dist == 'plume':
-            # Tweak the limits and add latex math labels.
-            ax_dist.set_xlabel(r'$\theta$')
-            ax_dist.set_ylabel(r'$\phi$')
-            ax_dist.set_zlabel(r'$\rho$')
-            ax_dist.view_init(25, 45 - 90)
-            ax_dist_xyz.set_xlabel(r'x')
-            ax_dist_xyz.set_ylabel(r'y')
-            ax_dist_xyz.set_zlabel(r'z')
-            ax_dist_xyz.set_xlim(-0.5, 0.5)
-
-        plotname = f'{self.impactor} \u2192 {self.casename}'
-        file_plotname = safe_title_trans(plotname)
-        filename = file_plotname + \
-                   '_' + \
-                   dist[0] + 'dist' + \
-                   '_' + \
-                   '_'.join(species_l)
-        filename = safe_title_trans(filename)
-        if self.is_summed_up:
-            summedsfx = '_sm'
-        else:
-            summedsfx = ''
-
-        fig_dist.suptitle(plottitle, y=0.98)
-        fig_dist.savefig(os.path.join(self.outdir, filename) + f'_{self.dist_angle}{summedsfx}.{self.file_format}',
-                         dpi=300, format=self.file_format)  # , bbox_inches='tight')
-
-        if self.show_plot:
-            fig_dist.show()
-        plt.close(fig_dist)
-        return fig_dist, ax_dist
-
-    def plot_yield(self, exp_H_data=None, exp_He_data=None):
-        if self.isVerbose:
-            print(
-                  'Plotting yield'
-                  )
-        params = {'legend.fontsize': 'large',
-                  'figure.titlesize': 'x-large',
-                  'figure.figsize': (6, 4.5),
-                  'axes.labelsize': 'large',
-                  'axes.titlesize': 'medium',
-                  'xtick.labelsize': 'large',
-                  'ytick.labelsize': 'large'}
-        pylab.rcParams.update(params)
-        fig = plt.figure(dpi=300)
-        self.ColorPalette()  # create plotting dictionary (only colors for now)
-        plotname = f'{self.impactor} \u2192 {self.casename}'
-
-        ax = sns.lineplot(data=self.yield_df,
-                          palette=dict(self.plotting_key['color']),
-                          dashes=True, # dict(self.plotting_key['line']),
-                          alpha=1.0)
-
-        ax.set_xlabel(r"angle [$^\circ$]")
-        ax.set_ylabel(r"Y [at/ion]")
-        ax.set_xlim(0, 90)
-
-        if self.return_amu_ion:
-            ax.set_ylim(0, self.yield_df.max().max() * 1.1)
-            ax.set_ylabel(r"Y [amu/ion]")
-
-            """
-            Add experimental data
-            """
-            if exp_H_data is not None and self.impactor == 'H':
-                exp_data = exp_H_data
-                exp_alpha = exp_data.index.values
-                ax.errorbar(exp_alpha, exp_data['amu/ion'], fmt='o', yerr=exp_data['error'], color='k',
-                            label='Experiment: Brötzner, unpub.')
-
-            elif exp_He_data is not None and self.impactor == 'He':
-                exp_data = exp_He_data
-                exp_alpha = exp_data.index.values
-                ax.errorbar(exp_alpha, exp_data['amu/ion'], fmt='o', yerr=exp_data['error'], color='k',
-                            label='Experiment: Brötzner, unpub.')
-
-        else:
-            ax.set_ylim(1e-4, 1e-0)
-            ax.set(yscale='log')
-        fig.suptitle(plotname, y=0.97)  # , fontsize=16)
-
-        mineral_str = 'Minerals:'
-        for mineral in self.mineral_a:
-            mineral_str = mineral_str + ' ' + mineral
-        ax.set_title(mineral_str, y=0.985)  # , fontsize=10)
-
-        """
-        Adjust Legend
-        """
-        handles, labels = ax.get_legend_handles_labels()
-        if self.return_amu_ion:
-            modat_label = self.sfx_for_plot(drop_prefix=False)
-            if self.rho_system_df:
-                rho_sys = self.rho_system_df.sum()
-                labels[0] = f'{modat_label},\nrho = {rho_sys:0.2f}' + ' g cm$^{-3}$'
-
-        ax.legend(handles,
-                  labels,
-                  ncol=max(int(np.ceil(len(handles) / 5)), 1),
-                  frameon=False)
-
-        # %%
-        filename = safe_title_trans(plotname)
-        if self.return_amu_ion:
-            filename += '_amu'
-        fig.savefig(os.path.join(self.outdir, f'{filename}.{self.file_format}'),
-                    dpi=300, format=self.file_format)  # , bbox_inches='tight')
-
-        if self.show_plot:
-            fig.show()
-        plt.close(fig)
-
-        return fig, ax
-
-    def cipw_norm(self, at_l, at_frac_l, verboseCIPW=False):
-        # Adapted from "Calculating of a CIPW norm from a bulk chemical analysis"
-        # by Kurt Hollocher,
-        # Geology Department
-        # Union College
-        # Schenectady, NY 12308
-        # U.S.A
-
-        if self.isDebug:
-            verboseCIPW = True
-
-        amu_min_dict = self.amu_minerals_dic
-        rho_min_dict = self.wt_density_df_minerals_dic
-        mindict_df_atoms = self.mindict_df_atoms.iloc[:, self.mindict_df_atoms.columns != 'total']
-        mineral_names = mindict_df_atoms.index.tolist()
-        minfrac_mol = pd.DataFrame(data=np.zeros(len(mineral_names)), columns=['frac'],
-                               index=mineral_names).T
-
-        comp_df = pd.DataFrame(data=at_frac_l, columns=['at%'], index=at_l)
-
-        species_dict_dir = os.path.join(self.tabledir,'species_dict.txt')
-        species_df = pd.read_csv(species_dict_dir, header=0, delim_whitespace=True)
-        species_dict = {species_df['metal'].values[i]: species_df['species'].values[i] for i in
-                        range(len(species_df['species'].values))}
-        species_cat_dict = {species_df['metal'].values[i]: species_df['cation'].values[i] for i in
-                            range(len(species_df['species'].values))}
-
-        """
-        Check if  composition was passed as elements or as oxides
-        """
-        CIPW_elements = False
-        element_l = ['O', 'Si', 'Ca', 'Mg']  # elements that should be passed as oxides
-        el_test = [i for i in element_l if i in at_l]
-        if len(el_test) > 0:
-            CIPW_elements = True
-            CIPW_oxides = not CIPW_elements
-            print(f'Composition given as oxides: {CIPW_oxides}')
-
-        """
-        2 divide oxide weights by their respective formula weights to give molar oxide proportions
-        """
-        if CIPW_elements:
-            if comp_df.loc['O'].values <= 0.47:
-                comp_df = comp_df.T.div(pd.Series(self.amu_dic))
-                comp_df = comp_df.T
-                print('Composition with < 47 % oxygen - wt% assumed')
-            elif comp_df.loc['O'].values == 0:
-                comp_df = comp_df.T.div(pd.Series(self.amu_dic))
-                comp_df = comp_df.T
-                print('Composition without oxygen - wt% assumed')
-            else:
-                print('Composition with > 47 % oxygen - at% assumed')
-            comp_df = comp_df.T.div(pd.Series(species_cat_dict))
-            comp_df.columns = comp_df.columns.map(species_dict.get)
-
-        else:
-            comp_df = comp_df.T.div(pd.Series(self.amu_oxides_dic))
-
-        comp_df = comp_df / comp_df.sum(axis=1).iloc[0]
-
-        comp_df.dropna(inplace=True, axis=1)  # drop all NAN columns
-
-        if verboseCIPW:
-            print(comp_df)
-
-        """
-        ** Sulfides: Add Mn, Cr, Ti, and Fe to Sulfur  
-        """
-        S_limit = 1e-5
-        if verboseCIPW:
-            print(f'#0\nS in columns? {"S" in comp_df.columns.values.tolist()}')
-        if 'S' in comp_df.columns:
-            if S_limit >= comp_df['S'].tolist()[0] > 0:
-                print(f'Low amount of S ({comp_df["S"].values[0]:0.2e} < {S_limit}) omitted')
-
-            elif comp_df['S'].tolist()[0] > S_limit:
-                print(f'Transition metals are attributed to Sulfur ({comp_df["S"].values[0]:0.2e})')
-                if verboseCIPW:
-                    print(f'#1\nCrO in columns? {"CrO" in comp_df.columns.values.tolist()}')
-                    print(f'Cr2O3 in columns? {"Cr2O3" in comp_df.columns.values.tolist()}')
-
-                if 'CrO' in comp_df.columns.values.tolist():
-                    if 2 * comp_df['FeO'].tolist()[0] >= comp_df['CrO'].tolist()[0]:
-                        minfrac_mol['Dbr'] = comp_df['CrO'].tolist()[0] / 2  # Dbr = FeCr2S4; occurance: Fe-meteorite
-                        minfrac_mol['Chr'] = minfrac_mol['Dbr'].tolist()[0]  # Chr = FeCr2O4; occurance: Moon
-                        comp_df['FeO'] = comp_df['FeO'] - comp_df['CrO'] / 2
-                        comp_df['CrO'] = 0.00
-                    else:
-                        minfrac_mol['Bzn'] = comp_df['CrO'].tolist()[0] / 3  # Bzn = Cr3S4; occurance: meteorites
-                        comp_df['CrO'] = 0.00
-                elif 'Cr2O3' in comp_df.columns.values.tolist():
-                    if comp_df['FeO'].tolist()[0] >= comp_df['Cr2O3'].tolist()[0]:
-                        minfrac_mol['Dbr'] = comp_df['Cr2O3'].tolist()[0]  # Dbr = FeCr2S4; occurance: Fe-meteorite
-                        minfrac_mol['Chr'] = minfrac_mol['Dbr'].tolist()[0]  # Chr = FeCr2O4; occurance: Moon
-                        comp_df['FeO'] = comp_df['FeO'] - comp_df['Cr2O3']
-                        comp_df['Cr2O3'] = 0.00
-                    else:
-                        minfrac_mol['Bzn'] = comp_df['Cr2O3'].tolist()[0] * 2 / 3  # Bzn = Cr3S4
-                        comp_df['Cr2O3'] = 0.00
-                else:
-                    minfrac_mol['Bzn'] = 0.00
-                    minfrac_mol['Dbr'] = 0.00
-
-                """
-                ** Check if there is enough S to put Cr into sulfides, otherwise, keep only chromite
-                """
-                pS1 = comp_df['S'].tolist()[0] -\
-                               minfrac_mol['Bzn'].tolist()[0] * 3 - \
-                               minfrac_mol['Dbr'].tolist()[0] * 4
-
-                if pS1 > 0:
-                    minfrac_mol['Chr'] = 0
-                    comp_df['S'] = pS1
-                else:
-                    minfrac_mol['Bzn'] = 0.00
-                    minfrac_mol['Dbr'] = 0.00
-                    if verboseCIPW:
-                        print(f'Not enough S to accomodate all Cr, accomodated into chromite (Chr) instead ')
-
-                if verboseCIPW:
-                    print(f'remaining sulfur: {comp_df["S"].tolist()[0]}')
-                    print(f'remaining FeO: {comp_df["FeO"].tolist()[0]}')
-
-                minerals = ['Abd', 'Tro', 'Was']
-                oxides = ['MnO', 'FeO', 'TiO2']
-
-                for mm, mineral in enumerate(minerals):
-                    oxide = oxides[mm]
-                    if comp_df['S'].tolist()[0] > 0:
-                        if comp_df['S'].tolist()[0] >= comp_df[oxide].tolist()[0]:
-                            minfrac_mol[mineral] = comp_df[oxide].tolist()[0]
-                            comp_df[oxide] = 0.00
-                            comp_df['S'] = comp_df['S'].tolist()[0] - minfrac_mol[mineral].tolist()[0]
-                        else:
-                            minfrac_mol[mineral] = comp_df['S'].tolist()[0]
-                            comp_df['S'] = 0.00
-                            comp_df[oxide] = comp_df[oxide].tolist()[0] - minfrac_mol[mineral].tolist()[0]
-
-                if verboseCIPW:
-                    print(f'remaining sulfur: {comp_df["S"].tolist()[0]} put into 1/4 Old and 3/4 Nng')
-                if comp_df['S'].tolist()[0] > 0:
-                    if comp_df['S'].tolist()[0] < min(comp_df['MgO'].tolist()[0] / 3 * 4,
-                                                      comp_df['CaO'].tolist()[0] / 4):
-                        minfrac_mol['Nng'] = comp_df['S'].tolist()[0] / 3 * 4
-                        minfrac_mol['Old'] = comp_df['S'].tolist()[0] / 4
-                        comp_df['MgO'] = comp_df['MgO'].tolist()[0] - minfrac_mol['Nng'].tolist()[0]
-                        comp_df['CaO'] = comp_df['CaO'].tolist()[0] - minfrac_mol['Old'].tolist()[0]
-                        comp_df['S'] = 0.00
-        """
-        3 Add MnO to FeO. 
-        """
-
-        if verboseCIPW:
-            print(f'#3\nMnO in columns? {"MnO" in comp_df.columns.values.tolist()}')
-        if 'MnO' in comp_df.columns:
-            comp_df['FeO'] = comp_df['FeO'].tolist()[0] + comp_df['MnO'].tolist()[0]
-
-        """
-        4 Apatite: Multiply P2O5 by 3.33 and subtract this number from CaO.
-        """
-        if verboseCIPW:
-            print(f'#4\nP2O5 in columns? {"P2O5" in comp_df.columns.values.tolist()}')
-        if 'P2O5' in comp_df.columns.values.tolist():
-            minfrac_mol['Ap'] = comp_df['P2O5'].tolist()[0] * 2 / 3
-            comp_df['CaO'] = comp_df['CaO'] - comp_df['P2O5'] * 3.33
-            comp_df['P2O5'] = 0.00
-
-        """
-        5 Ilmenite: Subtract TiO2 from FeO. Put the TiO2 value in Ilmenite
-        """
-        if verboseCIPW:
-            print(f'#5\nTiO2 in columns? {"TiO2" in comp_df.columns.values.tolist()}')
-        if 'TiO2' in comp_df.columns.values.tolist():
-            minfrac_mol['Ilm'] = comp_df['TiO2'].tolist()[0]
-            comp_df['FeO'] = comp_df['FeO'].tolist()[0] - comp_df['TiO2'].tolist()[0]
-            comp_df['TiO2'] = 0.00
-
-        """
-        6 Magnetite: Subtract Fe2O3 from FeO. Put the Fe2O3 value in magnetite. Fe2O3 is now zero
-        """
-        # if 'Fe2O3' in comp_df.columns:
-        #     minfrac_mol['Mt'] = comp_df['Fe2O3'].tolist()[0]
-        #     comp_df['FeO'] = comp_df['FeO'].tolist()[0] - comp_df['Fe2O3'].tolist()[0]
-        #     comp_df['Fe2O3'] = 0.00
-
-        """
-        7 Orthoclase: Subtract K2O from Al2O3. Put the K2O value in orthoclase. K2O is now zero
-        """
-        if comp_df['Al2O3'].tolist()[0] > 0:
-            minfrac_mol['Or'] = comp_df['K2O'].values
-            comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['K2O']
-            comp_df['K2O'] = 0.00
-        else:
-            print('Cannot accommodate K because of lack of Al in composition')
-
-        """
-        8 Albite (provisional): Subtract Na2O from Al2O3. Put the Na2O value in albite. 
-                                Retain the Na2O value for possible normative nepheline.
-        """
-        if comp_df['Na2O'].values > comp_df['Al2O3'].values:
-            minfrac_mol["Ab"] = comp_df['Al2O3'].values
-            Na2O_surplus = comp_df['Na2O'] - comp_df['Al2O3']
-            comp_df['Al2O3'] = 0
-            print(f'There is a Na2O surplus of {Na2O_surplus.values[0]:.2%}!')
-        else:
-            minfrac_mol["Ab"] = comp_df['Na2O'].values
-            comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['Na2O']
-
-        if verboseCIPW:
-            print(f'#8\nAb = {minfrac_mol["Ab"].tolist()[0]}')
-
-        """
-        9 Anorthite:                       
-        A. If CaO is more than the remaining Al2O3, then subtract Al2O3 from CaO. Put all Al2O3 into Anorthite.
-        
-        B. If Al2O3 is more than CaO, then subtract CaO from Al2O3. Put all CaO into anorthite.
-        """
-
-        An_CaO = comp_df['CaO'].tolist()[0]  # used for normative An number in step 24
-
-        if verboseCIPW:
-            print(f'#9\nCaO = {comp_df["CaO"].tolist()[0]}')
-            print(f'#9\nAl2O3 = {comp_df["Al2O3"].tolist()[0]}')
-        if comp_df['Al2O3'].tolist()[0] <= comp_df['CaO'].tolist()[0]:
-            minfrac_mol['An'] = comp_df['Al2O3'].tolist()[0]
-            comp_df['CaO'] = comp_df['CaO'] - comp_df['Al2O3']
-            comp_df['Al2O3'] = 0
-            if verboseCIPW:
-                print(f'#9A\nAn = {minfrac_mol["An"].tolist()[0]}')
-
-        else:
-            minfrac_mol['An'] = comp_df['CaO'].tolist()[0]
-            comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['CaO']
-            comp_df['CaO'] = 0
-            if verboseCIPW:
-                print(f'#9B\nAn = {minfrac_mol["An"].tolist()[0]}')
-
-        """
-        10 Corundum: If Al2O3 is not zero, put the remaining Al2O3 into corundum.                        
-        """
-        if comp_df['Al2O3'].tolist()[0] > 0:
-            minfrac_mol['Cor'] = comp_df['Al2O3'].tolist()[0]
-            comp_df['Al2O3'] = 0.0
-            comp_df['CaO'] = comp_df['CaO'] - comp_df['Al2O3']
-
-        """
-        11 Calculate Magnesium Number Mg/(Mg+Fe)                       
-        """
-        if 'FeO' not in comp_df.columns.values.tolist():
-            comp_df['FeO'] = 0.00
-        Mg_nbr = comp_df['MgO'].tolist()[0] / (comp_df['MgO'].tolist()[0] + comp_df['FeO'].tolist()[0])
-
-        """
-        12. Calculate the mean formula weight of the remaining FeO and MgO. 
-            This combined FeMg oxide, called FMO, will be used in subsequent calculations.                     
-        """
-        FMO_wt = (Mg_nbr * 40.3044) + ((1 - Mg_nbr) * 71.8464)
-
-        # Add dictionary entries for final wt%
-        amu_min_dict['Opx'] = 60.0843 + FMO_wt
-        rho_min_dict['Opx'] = Mg_nbr * rho_min_dict['En'] + (1 - Mg_nbr) * rho_min_dict['Fs']
-        amu_min_dict['Ol'] = 60.0843 + 2 * FMO_wt
-        rho_min_dict['Ol'] = Mg_nbr * rho_min_dict['Fo'] + (1 - Mg_nbr) * rho_min_dict['Fa']
-        # amu_min_dict['Di'] = 176.2480 + 2 * FMO_wt
-
-        """
-        13. Add FeO and MgO to make FMO              
-        """
-
-        FMO = comp_df['MgO'].tolist()[0] + comp_df['FeO'].tolist()[0]
-
-        # """
-        # 14. Diopside: If CaO is not zero, subtract CaO from FMO. Put all CaO into diopside. CaO is now zero.
-        # """
-        # if comp_df['CaO'].tolist()[0] > 0:
-        #     minfrac_mol['Di'] = comp_df['CaO'].tolist()[0]
-        #     FMO = FMO - comp_df['CaO'].tolist()[0]
-        #     comp_df['CaO'] = 0.0
-        """
-        14a. Diopside: If CaO is not zero, set diopside as min(CaO,MgO) and subtract from FMO.                   
-        """
-        if comp_df['CaO'].tolist()[0] > 0:
-            minfrac_mol['Di'] = min(comp_df['CaO'].tolist()[0], comp_df['MgO'].tolist()[0])
-            FMO = FMO - minfrac_mol['Di'].tolist()[0]
-            comp_df['CaO'] = comp_df['CaO'].tolist()[0] - minfrac_mol['Di'].tolist()[0]
-
-        """
-        14b. Diopside: If CaO is not zero, set diopside as min(CaO,MgO) and subtract from MgO.                   
-        """
-        if comp_df['CaO'].tolist()[0] > 0:
-            minfrac_mol['Wo'] = comp_df['CaO'].tolist()[0]
-            comp_df['CaO'] = 0.0
-
-        """
-        15. Orthopyroxene (provisional): Put all remaining FMO into orthopyroxene. 
-            Retain the FMO value for the possible normative olivine.
-        """
-
-        if FMO > 0:
-            minfrac_mol['Opx'] = FMO
-            minfrac_mol['En'] = FMO * Mg_nbr
-            minfrac_mol['Fs'] = FMO * (1 - Mg_nbr)
-
-        """
-        16. Calculate the amount of SiO2 needed for all of the normative silicates listed above, allotting SiO2 as follows:
-            Orthoclase * 6 = needed SiO2 for each Orthoclase
-            Albite * 6 = needed SiO2 for each Albite
-            Anorthite * 2 = needed SiO2 for each Anorthite
-            Diopside * 2 = needed SiO2 for each Diopside
-            Orthopyroxene * 1 = needed SiO2 for each Hypersthene
-        """
-
-        SiO2_Or = minfrac_mol['Or'] * 6
-        SiO2_Ab = minfrac_mol["Ab"] * 6
-        SiO2_An = minfrac_mol['An'] * 2
-        SiO2_Di = minfrac_mol['Di'] * 2
-        SiO2_Wo = minfrac_mol['Wo'] * 1
-        SiO2_Opx = minfrac_mol['Opx'] * 1
-
-        """
-        17. Sum the five SiO2 values just calculated, and call this number pSi1 for the first provisional SiO2.
-        """
-        pSi1 = SiO2_Or.values + SiO2_Ab.values + SiO2_An.values + SiO2_Di.values + SiO2_Opx.values + SiO2_Wo.values
-
-        """
-        18. Quartz: If there is enough silica to make all five minerals in the list in #16 then the
-            rock is quartz-normative. Otherwise there is no quartz in the norm and silica to make the rest
-            of the silicates must come from other sources.
-            
-            A. If pSi1 calculated in #16 is less than SiO2, then there is excess silica. Subtract pSi1 from
-            SiO2, and put excess SiO2 in quartz. SiO2, nepheline, and olivine are now zero. Skip to #23.
-
-            B. If pSi1 calculated in #16 is more than SiO2, then the rock is silica deficient. Proceed to #19.
-        """
-
-        if comp_df['SiO2'].values < pSi1:
-            minfrac_mol['Qz'] = 0.00
-            """
-            19. -> 20. Sum the four SiO2 values just calculated to get pSi2. Subtract pSi2 from SiO2 to get the
-            of SiO2 available for olivine and orthopyroxene, called pSi3.
-            
-            A. If FMO is greater than or equal to 2 times pSi3, then put all FMO in Olivine. FMO and
-            Orthopyroxene are now zero. Proceed to #21.
-            
-            B. If FMO is less than 2 times pSi3, then nepheline is zero. Calculate the amount of
-            orhtopyroxene and olivine as follows:
-                Orthopyroxne = ((2 * pSi3) - FMO)
-                Olivine = (FMO - orthopyroxene)
-                Skip to #23
-            """
-            pSi2 = SiO2_Or.tolist()[0] + SiO2_Ab.tolist()[0] + SiO2_An.tolist()[0] + SiO2_Di.tolist()[0] + \
-                   SiO2_Wo.tolist()[0]
-            pSi3 = comp_df['SiO2'].tolist()[0] - pSi2
-
-            if FMO >= 2 * pSi3:
-                if verboseCIPW: print(
-                    'Total Fe+Mg is greater equal to two times the SiO2 remaining after forming Or, Ab, An and Di ')
-                minfrac_mol['Ol'] = FMO
-                minfrac_mol['Opx'] = 0.00
-                minfrac_mol['En'] = 0.00
-                minfrac_mol['Fs'] = 0.00
-                FMO = 0
-
-                """
-                21. Nepheline, albite (final): If you reached this step, then turning orthopyroxene into olivine
-                in #20A did not yield enough silica to make orthoclase, albite, anorthite, diopside, and
-                olivine.                 
-                """
-
-                SiO2_Ol = 0.5 * minfrac_mol['Ol']
-
-                """
-                22. Sum the three SiO2 values just calculated to get pSi4. Subtract pSi4 from SiO2 to get
-                    pSi5, which is the amount of SiO2 available for albite and nepheline.
-                        Albite = (pSi5-(2*Na2O))/4
-                        Nepheline = Na2O-Albite
-                """
-                pSi4 = SiO2_Or.tolist()[0] + SiO2_An.tolist()[0] + SiO2_Di.tolist()[0] + SiO2_Ol.tolist()[0] + \
-                       SiO2_Wo.tolist()[0]
-
-                pSi5 = comp_df['SiO2'].tolist()[0] - pSi4
-                minfrac_mol["Ab"] = (pSi5 - (2 * comp_df['Na2O'].tolist()[0])) / 4
-                if verboseCIPW:
-                    print(f'#22\nAb = {minfrac_mol["Ab"].tolist()[0]}')
-                minfrac_mol['Nph'] = comp_df['Na2O'].tolist()[0] - minfrac_mol["Ab"].tolist()[0]
-                if minfrac_mol["Ab"].tolist()[0] < 0:
-                    raise ValueError('Your composition lies outside the CIPW mineralogy.'
-                                     'This may happen if CaO is high and SiO2 low')
-                else:
-                    pass
-
-
-            elif FMO < 2 * pSi3:
-                if verboseCIPW:
-                    print('Total Fe+Mg is less than two time the SiO2 remaining after forming Or, Ab, An and Di ')
-                minfrac_mol['Nph'] = 0.00
-                minfrac_mol['Opx'] = (2 * pSi3) - FMO
-                minfrac_mol['En'] = ((2 * pSi3) - FMO) * Mg_nbr
-                minfrac_mol['Fs'] = ((2 * pSi3) - FMO) * (1 - Mg_nbr)
-                minfrac_mol['Ol'] = FMO - minfrac_mol['Opx'].tolist()[0]
-
-
-
-        elif pSi1 < comp_df['SiO2'].tolist()[0]:
-            minfrac_mol['Nph'] = 0
-            minfrac_mol['Ol'] = 0
-            comp_df['SiO2'] = comp_df['SiO2'] - pSi1
-            minfrac_mol['Qz'] = comp_df['SiO2'].tolist()[0]
-            comp_df['SiO2'] = 0.0
-        """
-        23. Multiply orthoclase, albite, and nepheline by two. Divide olivine by two
-        """
-        minfrac_mol['Or'] = minfrac_mol['Or'].tolist()[0] * 2
-        minfrac_mol["Ab"] = minfrac_mol["Ab"].tolist()[0] * 2
-        minfrac_mol['Nph'] = minfrac_mol['Nph'].tolist()[0] * 2
-        minfrac_mol['Ol'] = minfrac_mol['Ol'].tolist()[0] / 2
-        minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * Mg_nbr
-        minfrac_mol['Fa'] = minfrac_mol['Ol'].tolist()[0] * (1 - Mg_nbr)
-
-        # rho_min_dict['Ol'] = rho_min_dict['Fo'] * minfrac_mol['Fo'] + rho_min_dict['Fa'] * minfrac_mol['Fa']
-
-        if verboseCIPW:
-            print(f'#23\nAb = {minfrac_mol["Ab"].tolist()[0]}')
-        """
-        24. Calculate An number, which is the Ca/(Ca+Na) ratio in normative plagioclase:
-        """
-
-        An_nbr = comp_df['CaO'].tolist()[0] / (An_CaO + comp_df['Na2O'].tolist()[0])
-
-        """
-        25. Plagioclase: Add albite to anorthite to make plagioclase. Retain the albite value, anorthite is now zero.
-        """
-        minfrac_mol['Plag'] = minfrac_mol["Ab"].tolist()[0] + minfrac_mol['An'].tolist()[0]
-        if verboseCIPW:
-            print(f'#25\nAb = {minfrac_mol["Ab"].tolist()[0]}')
-            print(f'An = {minfrac_mol["An"].tolist()[0]}')
-            print(minfrac_mol['Plag'].tolist()[0])
-
-        """
-        25. Calculate the formula weight of plagioclase, using the An number value from #24
-        """
-        plag_wt = (An_nbr * 278.2093) + ((1 - An_nbr) * 262.2230)
-
-        amu_min_dict['Plag'] = plag_wt
-        rho_min_dict['Plag'] = An_nbr * rho_min_dict['An'] + (1 - An_nbr) * rho_min_dict['Ab']
-
-        """
-        Obtain minfrac for comparison with CIPW (in wt%)
-        """
-        minfrac_CIPW_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
-        minfrac_CIPW_vol = minfrac_CIPW_wt.div(pd.Series(rho_min_dict))
-        minfrac_CIPW_vol.drop(["Ab", 'An', 'Fo', 'Fa', 'En', 'Fs', 'Wo'], inplace=True, axis=1)
-        minfrac_CIPW_vol = normalize_df(minfrac_CIPW_vol)
-
-        """
-        Obtain mineralogy in wt% and vol%
-        """
-        minfrac_mol.drop(['Plag', 'Ol', 'Opx'], inplace=True, axis=1)
-        minfrac_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
-        minfrac_vol = minfrac_wt.div(pd.Series(rho_min_dict))
-
-        minfrac_mol, minfrac_vol, minfrac_wt = \
-            normalize_dfs([minfrac_mol, minfrac_vol, minfrac_wt])
-
-        print(f'\nspubase modal abundances (vol%):\n{minfrac_vol}')
-        print(f'Total: {minfrac_vol.sum().iloc[0]:0.2f}')
-
-
-
-        if verboseCIPW:
-            print(f'\nCIPW modal abundances (vol%):\n{minfrac_CIPW_vol}')
-            print(f'Total: {minfrac_CIPW_vol.sum().iloc[0]:0.2f}')
-
-        self.minfrac_df_weight = minfrac_wt
-        self.minfrac_df_volume = minfrac_vol
-        self.minfrac_df_volume_CIPW = minfrac_CIPW_vol
-
-        return minfrac_vol
-
-    def systemdensity(self):
+    def system_density(self):
 
         minfrac_wt = self.minfrac_df_weight  # use mass wt% to perform mass balance of output system density in g/cm^3
         amu_df = self.amu_minerals
