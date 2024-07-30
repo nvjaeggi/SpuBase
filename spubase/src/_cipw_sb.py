@@ -285,16 +285,16 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
                             Retain the Na2O value for possible normative nepheline.
     """
     if comp_df['Na2O'].values > comp_df['Al2O3'].values:
-        minfrac_mol["Ab"] = comp_df['Al2O3'].values
+        minfrac_mol['Ab'] = comp_df['Al2O3'].values
         Na2O_surplus = comp_df['Na2O'] - comp_df['Al2O3']
         comp_df['Al2O3'] = 0
         print(f'There is a Na2O surplus of {Na2O_surplus.values[0]:.2%}!')
     else:
-        minfrac_mol["Ab"] = comp_df['Na2O'].values
+        minfrac_mol['Ab'] = comp_df['Na2O'].values
         comp_df['Al2O3'] = comp_df['Al2O3'] - comp_df['Na2O']
 
     if verbose_cipw:
-        print(f'#8\nAb = {minfrac_mol["Ab"].tolist()[0]}')
+        print(f"#8\nAb = {minfrac_mol['Ab'].tolist()[0]}")
 
     """
     9 Anorthite:                       
@@ -398,7 +398,7 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
     """
 
     SiO2_Or = minfrac_mol['Or'] * 6
-    SiO2_Ab = minfrac_mol["Ab"] * 6
+    SiO2_Ab = minfrac_mol['Ab'] * 6
     SiO2_An = minfrac_mol['An'] * 2
     SiO2_Di = minfrac_mol['Di'] * 2
     SiO2_Wo = minfrac_mol['Wo'] * 1
@@ -466,11 +466,11 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
                    SiO2_Wo.tolist()[0]
 
             pSi5 = comp_df['SiO2'].tolist()[0] - pSi4
-            minfrac_mol["Ab"] = (pSi5 - (2 * comp_df['Na2O'].tolist()[0])) / 4
+            minfrac_mol['Ab'] = (pSi5 - (2 * comp_df['Na2O'].tolist()[0])) / 4
             if verbose_cipw:
-                print(f'#22\nAb = {minfrac_mol["Ab"].tolist()[0]}')
-            minfrac_mol['Nph'] = comp_df['Na2O'].tolist()[0] - minfrac_mol["Ab"].tolist()[0]
-            if minfrac_mol["Ab"].tolist()[0] < 0:
+                print(f"#22\nAb = {minfrac_mol['Ab'].tolist()[0]}")
+            minfrac_mol['Nph'] = comp_df['Na2O'].tolist()[0] - minfrac_mol['Ab'].tolist()[0]
+            if minfrac_mol['Ab'].tolist()[0] < 0:
                 raise ValueError('Your composition lies outside the CIPW mineralogy.'
                                  'This may happen if CaO is high and SiO2 low')
             else:
@@ -498,7 +498,7 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
     23. Multiply orthoclase, albite, and nepheline by two. Divide olivine by two
     """
     minfrac_mol['Or'] = minfrac_mol['Or'].tolist()[0] * 2
-    minfrac_mol["Ab"] = minfrac_mol["Ab"].tolist()[0] * 2
+    minfrac_mol['Ab'] = minfrac_mol['Ab'].tolist()[0] * 2
     minfrac_mol['Nph'] = minfrac_mol['Nph'].tolist()[0] * 2
     minfrac_mol['Ol'] = minfrac_mol['Ol'].tolist()[0] / 2
     minfrac_mol['Fo'] = minfrac_mol['Ol'].tolist()[0] * magnesium_nbr
@@ -507,7 +507,7 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
     # rho_min_dict['Ol'] = rho_min_dict['Fo'] * minfrac_mol['Fo'] + rho_min_dict['Fa'] * minfrac_mol['Fa']
 
     if verbose_cipw:
-        print(f'#23\nAb = {minfrac_mol["Ab"].tolist()[0]}')
+        print(f"#23\nAb = {minfrac_mol['Ab'].tolist()[0]}")
     """
     24. Calculate An number, which is the Ca/(Ca+Na) ratio in normative plagioclase:
     """
@@ -517,10 +517,10 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
     """
     25. Plagioclase: Add albite to anorthite to make plagioclase. Retain the albite value, anorthite is now zero.
     """
-    minfrac_mol['Plag'] = minfrac_mol["Ab"].tolist()[0] + minfrac_mol['An'].tolist()[0]
+    minfrac_mol['Plag'] = minfrac_mol['Ab'].tolist()[0] + minfrac_mol['An'].tolist()[0]
     if verbose_cipw:
-        print(f'#25\nAb = {minfrac_mol["Ab"].tolist()[0]}')
-        print(f'An = {minfrac_mol["An"].tolist()[0]}')
+        print(f"#25\nAb = {minfrac_mol['Ab'].tolist()[0]}")
+        print(f"An = {minfrac_mol['An'].tolist()[0]}")
         print(minfrac_mol['Plag'].tolist()[0])
 
     """
@@ -537,7 +537,7 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
     minfrac_cipw_wt = minfrac_mol.mul(pd.Series(amu_min_dict))
 
     minfrac_cipw_vol = minfrac_cipw_wt.div(pd.Series(rho_min_dict))
-    minfrac_cipw_vol.drop(["Ab", 'An', 'Fo', 'Fa', 'En', 'Fs', 'Wo'], inplace=True, axis=1)
+    minfrac_cipw_vol.drop(['Ab', 'An', 'Fo', 'Fa', 'En', 'Fs', 'Wo'], inplace=True, axis=1)
     minfrac_cipw_vol = normalize_dfs([minfrac_cipw_vol])[0]
 
     """
