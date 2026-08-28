@@ -106,7 +106,7 @@ def cipw_norm(self, at_l, at_frac_l, verbose_cipw=False):
     comp_df = pd.DataFrame(data=at_frac_l, columns=['at%'], index=at_l)
 
     species_dict_dir = os.path.join(self.tabledir, 'species_dict.txt')
-    species_df = pd.read_csv(species_dict_dir, header=0, delim_whitespace=True)
+    species_df = pd.read_csv(species_dict_dir, header=0, sep='\s+')
     species_dict = {species_df['metal'].values[i]: species_df['species'].values[i] for i in
                     range(len(species_df['species'].values))}
     species_cat_dict = {species_df['metal'].values[i]: species_df['cation'].values[i] for i in

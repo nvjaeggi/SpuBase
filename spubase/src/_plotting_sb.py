@@ -358,7 +358,7 @@ def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, titl
         ax_dist.set_ylabel(r'y')
         ax_dist.set_zlabel(r'z')
 
-        ax_dist.set_zlim([0, None])
+        ax_dist.set_zlim(bottom=0)
 
         ax_dist.view_init(elev, azim)
 
@@ -395,7 +395,7 @@ def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, titl
             handles, labels = ax_dist.get_legend_handles_labels()  # labels are pre-defined
         else:
             handles, labels = ax_dist.get_legend_handles_labels()  # labels are pre-defined
-            labels = [label.replace('_', '$_\mathrm{') + '}$' for label in labels]
+            labels = [label.replace('_', '$_\\mathrm{') + '}$' for label in labels]
 
         yanchor = 0.09
         nrows = 2
@@ -437,7 +437,7 @@ def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, titl
             handles, _ = ax_dist.get_legend_handles_labels()  # labels are pre-defined
         else:
             handles, labels = ax_dist.get_legend_handles_labels()
-            labels = [label.replace('_', '$_\mathrm{') + '}$' for label in labels]
+            labels = [label.replace('_', '$_\\mathrm{') + '}$' for label in labels]
 
         if len(labels) > 0:
             ax_dist.legend(handles,
@@ -480,7 +480,7 @@ def plot_dist(self, dist='energy', species_l=None, ion_flux=1, e_lims=None, titl
             handles, _ = ax_dist.get_legend_handles_labels()  # labels are pre-defined
         else:
             handles, labels = ax_dist.get_legend_handles_labels()  # labels are pre-defined
-            labels = [label.replace('_', '$_\mathrm{') + '}$' for label in labels]
+            labels = [label.replace('_', '$_\\mathrm{') + '}$' for label in labels]
 
         yanchor = 0.18
         nrows = 3

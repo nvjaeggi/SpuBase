@@ -113,23 +113,23 @@ class Particles:
         # dictionaries and table data
         self.mindict_df_atoms = pd.read_csv(os.path.join(self.tabledir, 'minerals_atoms.txt'), header=0, index_col=0)
         table_dir_atoms = os.path.join(self.tabledir, "table1.txt")  # adapted SDTrimSP table for at properties
-        self.at_density_df_atoms = pd.read_csv(table_dir_atoms, sep="\s+", usecols=['atomic_density'], index_col=0,
+        self.at_density_df_atoms = pd.read_csv(table_dir_atoms, sep="\\s+", usecols=['atomic_density'], index_col=0,
                                                skiprows=10, encoding='latin-1')
         table_dir_minerals = os.path.join(self.tabledir, "rho_minerals.txt")
-        self.wt_density_df_minerals = pd.read_csv(table_dir_minerals, sep="\s+", header=0,
+        self.wt_density_df_minerals = pd.read_csv(table_dir_minerals, sep="\\s+", header=0,
                                                   index_col=0, encoding='latin-1')
         self.wt_density_df_minerals_dic = self.wt_density_df_minerals.T.to_dict('index')['g/cm3']
         self.mindict_df_oxides = pd.read_csv(os.path.join(self.tabledir, 'minerals_oxides.txt'), header=0, index_col=0)
         table_dir_oxides = os.path.join(self.tabledir, "table_compound.txt")  # adapted SDTrimSP table for ox properties
-        self.oxides_df = pd.read_csv(table_dir_oxides, sep="\s+", index_col=0, skiprows=5, encoding='latin-1')
+        self.oxides_df = pd.read_csv(table_dir_oxides, sep="\\s+", index_col=0, skiprows=5, encoding='latin-1')
         self.at_density_df_oxides = self.oxides_df['atomic_density']
 
         self.amu_elements = pd.read_csv(os.path.join(self.tabledir, 'amu_elements.txt'),
-                                        index_col=0, header=0, delim_whitespace=True)
+                                        index_col=0, header=0, sep='\\s+')
         self.amu_oxides = pd.read_csv(os.path.join(self.tabledir, 'amu_oxides.txt'),
-                                      index_col=0, header=0, delim_whitespace=True)
+                                      index_col=0, header=0, sep='\\s+')
         self.amu_minerals = pd.read_csv(os.path.join(self.tabledir, 'amu_minerals.txt'),
-                                        index_col=0, header=0, delim_whitespace=True)
+                                        index_col=0, header=0, sep='\\s+')
 
         self.amu_dic = self.amu_elements.T.to_dict('index')['amu']
         self.amu_oxides_dic = self.amu_oxides.T.to_dict('index')['amu']
